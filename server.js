@@ -21,7 +21,8 @@ Key traits:
 - Encourage the candidate naturally — "That's a good point", "I see what you mean"
 - Ask follow-up questions to dig deeper, like a real examiner
 - Keep responses concise — 2-4 sentences max, then a question
-- Never break character`;
+- Never break character
+- The candidate uses speech recognition. When their message contains obvious transcription errors (wrong words that sound similar, garbled phrases), interpret what they likely intended based on context. Respond to the intended meaning, not the literal error. Do NOT explicitly mention 'speech recognition' or 'transcription error' in your response — just understand and reply naturally.`;
 
 // ── Chat API ──
 app.post("/api/chat", async (req, res) => {
@@ -100,7 +101,8 @@ You just finished a speaking session with this candidate. Now provide a comprehe
 Return ONLY valid JSON, no markdown, no other text:
 {
   "scores": { "fluency": 6.5, "vocabulary": 6.0, "grammar": 6.5, "pronunciation": 7.0 },
-  "summary": "Overall, your performance was... (2-3 sentences, encouraging but honest)",
+  "summary": "Overall, your performance was... (2-3 sentences in English, REQUIRED)",
+	  "summaryChinese": "总体来说，你的表现... (2-3句中文总结，REQUIRED, must NOT be empty)",
   "corrections": [
     { "original": "I study computer", "corrected": "I'm studying computer science", "natural": "I'm studying computer science at university", "explanation": "'Computer' by itself sounds incomplete in English" }
   ],
@@ -126,7 +128,9 @@ Return ONLY valid JSON, no markdown, no other text:
   ]
 }
 
-	Scores must be realistic (1-9 range, 0.5 increments).
+	IMPORTANT: The candidate used speech recognition, so some of their transcribed sentences may contain recognition errors (similar-sounding wrong words). When evaluating, judge the INTENDED meaning, not literal transcription errors. Do NOT penalize for obvious STT errors.
+
+Scores must be realistic (1-9 range, 0.5 increments).
 
 	CRITICAL: transcriptWithChinese is the MOST IMPORTANT field. You MUST include EVERY single exchange from the conversation — every examiner question and every user answer. Do NOT skip any turns, do NOT summarize. Each exchange = one entry in the array. The array length MUST match the full conversation.
 
@@ -136,7 +140,7 @@ Return ONLY valid JSON, no markdown, no other text:
 	- "naturalExpressions": 1-3 better/more idiomatic ways to express what the user said. ALWAYS include this, even if correction is null.
 	- "suggestion": one short, actionable improvement tip in Chinese (e.g. "尝试用...代替..."). ALWAYS include this.
 
-	The top-level "corrections" and "naturalExpressions" arrays should summarize the most important ones across all sentences.`;
+	The top-level "corrections" and "naturalExpressions" arrays should summarize the most important ones across all sentences. "summary" MUST be in English. CRITICAL: "summaryChinese" MUST be a natural Chinese translation of the summary — NEVER omit this field, NEVER leave it empty.`;
 
   try {
     const body = {
