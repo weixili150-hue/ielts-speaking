@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=2.0">
 <title>我是世界口活冠军 — 雅思口语考官</title>
 <style>
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
@@ -298,9 +298,9 @@ body {
       </div>
       <div class="chat-messages" id="chatMessages"></div>
       <div class="chat-input-area">
-        <button class="btn-mic" id="micBtn" onclick="toggleVoiceInput()" title="语音输入">🎤</button>
+        <button class="btn-mic" id="micBtn" onclick="toggleVoiceInput()" aria-label="语音输入" title="语音输入">🎤</button>
         <textarea id="chatInput" placeholder="说点什么..." rows="1"></textarea>
-        <button class="btn-send" onclick="sendMessage()">↑</button>
+        <button class="btn-send" onclick="sendMessage()" aria-label="发送消息">↑</button>
       </div>
     </div>
   </div>
@@ -349,7 +349,541 @@ body {
 </div>
 
 <script>
-// JS will be added in next task
+// ── Globals ──
+const STORAGE_KEY = "ielts-speaking-history";
+const MAX_ITEMS = 200;
+let currentMode = "";       // "free-talk" | "ielts-topics" | "mock-test"
+let currentInteraction = ""; // "chat" | "voice"
+let currentTopic = "";
+let currentPhase = "part1";
+let chatHistory = [];
+let voiceTranscript = [];
+let isMicListening = false;
+let recognition = null;
+
+// ── IELTS Topics ──
+const IELTS_TOPICS = [
+  "Hometown", "Work & Career", "Studies & Education", "Family & Friends",
+  "Travel & Holidays", "Food & Cooking", "Hobbies & Free Time",
+  "Technology & Internet", "Environment & Nature", "Health & Fitness",
+  "Music & Art", "Books & Reading", "Sports", "Shopping & Fashion",
+  "Transport", "Housing & Accommodation", "Weather & Climate"
+];
+
+// ── Toast ──
+let toastTimer;
+function showToast(msg, type) {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.className = "toast " + (type || "success") + " show";
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove("show"), 2500);
+}
+
+// ── Tab navigation ──
+function switchTab(name) {
+  document.querySelectorAll(".nav-item").forEach((el, i) => {
+    el.classList.toggle("active", (i === 0 && name === "home") || (i === 1 && name === "history"));
+  });
+  if (name === "home") showView("home");
+  else if (name === "history") { showView("history"); renderHistory(); }
+}
+
+function showView(name) {
+  document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
+  const el = document.getElementById("view-" + name);
+  if (el) el.classList.add("active");
+}
+
+// ── Mode cards ──
+const MODES = [
+  { id: "free-talk", icon: "\u{1F4AC}", title: "自由聊 Free Talk", desc: "和考官随意聊天，任何话题都可以。氛围轻松，适合日常口语练习。考官会根据你的兴趣引导对话。" },
+  { id: "ielts-topics", icon: "\u{1F4DA}", title: "雅思真题 IELTS Topics", desc: "围绕雅思常考话题练习：家庭、工作、教育、旅行、科技等。每次选择或随机一个话题，考官围绕话题提问。" },
+  { id: "mock-test", icon: "\u{1F3AF}", title: "完整模拟 Full Mock Test", desc: "真实还原雅思口语考试流程：Part 1（日常话题）→ Part 2（独立陈述）→ Part 3（深入讨论）。全程按考试流程，最后给出完整分数报告。" }
+];
+
+function renderModeCards() {
+  const container = document.querySelector(".mode-cards");
+  container.innerHTML = MODES.map(m => `
+    <div class="mode-card" onclick="selectMode('${m.id}')">
+      <div class="icon">${m.icon}</div>
+      <h3>${m.title}</h3>
+      <p>${m.desc}</p>
+    </div>`).join("");
+}
+
+function selectMode(mode) {
+  currentMode = mode;
+  currentTopic = "";
+  currentPhase = "part1";
+  chatHistory = [];
+  voiceTranscript = [];
+  showInteractionChoice();
+}
+
+function showInteractionChoice() {
+  const modeName = MODES.find(m => m.id === currentMode).title;
+  document.querySelector(".home .mode-cards").innerHTML = `
+    <div class="interaction-choice">
+      <h3>${modeName}</h3>
+      <p class="subtitle" style="margin-bottom:16px">选择练习方式</p>
+      <div class="choice-card" onclick="startChat()">
+        <h4>\u{1F4AC} 文字对话 + 考官发音</h4>
+        <p>语音输入为主，打字为辅。考官用文字回复，可点击发音。每句话都能得到即时的纠错反馈，适合边练边学。</p>
+      </div>
+      <div class="choice-card" onclick="startVoice()">
+        <h4>\u{1F399}️ 全程语音对话</h4>
+        <p>像和真人面对面聊天，完全沉浸式。对话过程中不显示文字、不打断，纯语音交流。练习完才能看到对话记录。适合模拟真实考试场景，锻炼听力和即兴反应。</p>
+      </div>
+      <button class="btn-back" style="margin-top:8px" onclick="renderModeCards()">← 返回</button>
+    </div>`;
+}
+
+// ── Chat Mode (A) ──
+function startChat() {
+  currentInteraction = "chat";
+  if (currentMode === "ielts-topics") {
+    showTopicPicker("chat");
+    return;
+  }
+  initChat();
+}
+
+function showTopicPicker(interaction) {
+  const container = document.querySelector(".home .mode-cards");
+  container.innerHTML = `
+    <div style="padding:16px">
+      <h3 style="margin-bottom:16px">选择话题</h3>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px">
+        ${IELTS_TOPICS.map(t => `<button class="mode-card" style="flex:0 0 auto;padding:8px 14px;font-size:0.8rem;cursor:pointer" onclick="pickTopic('${t}','${interaction}')">${t}</button>`).join("")}
+      </div>
+      <button class="btn-back" onclick="renderModeCards()">← 返回</button>
+    </div>`;
+}
+
+function pickTopic(topic, interaction) {
+  currentTopic = topic;
+  if (interaction === "chat") initChat();
+  else initVoice();
+}
+
+async function initChat() {
+  showView("chat");
+  document.getElementById("phaseTag").textContent = currentMode === "mock-test" ? "Part 1" : (currentTopic || "Free Talk");
+  document.getElementById("chatMessages").innerHTML = "";
+  document.getElementById("chatInput").value = "";
+  chatHistory = [];
+
+  const greeting = currentMode === "free-talk"
+    ? "Hi there! I'm James. What would you like to chat about today?"
+    : currentMode === "ielts-topics"
+    ? `Let's talk about ${currentTopic}. I'll ask you a few questions. Ready?`
+    : "Good morning. My name is James Mitchell. I'll be your examiner today. Let's start with Part 1. Can you tell me a bit about yourself?";
+
+  addMessage("examiner", greeting);
+  await speakExaminer(greeting);
+}
+
+async function sendMessage() {
+  const input = document.getElementById("chatInput");
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = "";
+  addMessage("user", text);
+  chatHistory.push({ speaker: "user", text });
+
+  const typing = addTyping();
+  try {
+    const resp = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode: currentMode, topic: currentTopic, message: text, history: chatHistory.slice(0, -1) })
+    });
+    const data = await resp.json();
+    typing.remove();
+
+    if (!resp.ok) { showToast(data.error || "Error", "error"); return; }
+
+    addMessage("examiner", data.reply);
+    chatHistory.push({ speaker: "examiner", text: data.reply });
+
+    if (data.correction) {
+      addCorrection(data.correction);
+    }
+
+    await speakExaminer(data.reply);
+  } catch (e) { typing.remove(); showToast("Network error", "error"); }
+}
+
+function addMessage(speaker, text) {
+  const div = document.createElement("div");
+  div.className = "msg " + speaker;
+  div.innerHTML = `
+    <div class="speaker">${speaker === "examiner" ? "James" : "You"}</div>
+    <div class="bubble">${escapeHtml(text)}</div>
+    ${speaker === "examiner" ? `<button class="speak-btn" onclick="speakExaminer('${escapeAttr(text)}')">\u{1F50A} 播放</button>` : ""}`;
+  document.getElementById("chatMessages").appendChild(div);
+  div.scrollIntoView({ behavior: "smooth" });
+}
+
+function addCorrection(text) {
+  const lines = text.split("\n").filter(l => l.trim());
+  const errMatch = text.match(/Error:\s*(.+)/i);
+  const shouldMatch = text.match(/Should be:\s*(.+)/i);
+  const naturalMatch = text.match(/More natural:\s*(.+)/i);
+  const err = errMatch ? errMatch[1] : "";
+  const fix = shouldMatch ? shouldMatch[1] : "";
+  const natural = naturalMatch ? naturalMatch[1] : "";
+
+  const div = document.createElement("div");
+  div.className = "correction-card";
+  div.innerHTML = `
+    <div class="title">\u{1F4A1} James 的建议</div>
+    ${err ? `<span class="err">✗ ${escapeHtml(err)}</span><br>` : ""}
+    ${fix ? `<span class="fix">✓ ${escapeHtml(fix)}</span><br>` : ""}
+    ${natural ? `<div class="natural">地道说法：${escapeHtml(natural)}</div>` : `<div style="font-size:0.7rem;color:#8899aa;margin-top:4px">${escapeHtml(text)}</div>`}`;
+  document.getElementById("chatMessages").appendChild(div);
+  div.scrollIntoView({ behavior: "smooth" });
+}
+
+function addTyping() {
+  const div = document.createElement("div");
+  div.className = "msg examiner";
+  div.innerHTML = `<div class="speaker">James</div><div class="bubble"><div class="loading"><div class="dots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div></div></div>`;
+  document.getElementById("chatMessages").appendChild(div);
+  div.scrollIntoView({ behavior: "smooth" });
+  return { remove: () => div.remove() };
+}
+
+// ── Examiner TTS ──
+async function speakExaminer(text) {
+  if (!window.speechSynthesis) return;
+  window.speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = "en-GB";
+  u.rate = 0.88;
+  const voices = speechSynthesis.getVoices();
+  const gb = voices.find(v => v.lang === "en-GB") || voices.find(v => v.lang.startsWith("en-GB")) || voices.find(v => v.lang.startsWith("en"));
+  if (gb) u.voice = gb;
+  speechSynthesis.speak(u);
+}
+
+if (window.speechSynthesis) {
+  speechSynthesis.getVoices();
+  speechSynthesis.onvoiceschanged = () => speechSynthesis.getVoices();
+}
+
+// ── Voice Input (STT) ──
+function toggleVoiceInput() {
+  if (isMicListening) { stopVoiceInput(); return; }
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { showToast("Browser doesn't support speech recognition", "error"); return; }
+  recognition = new SR();
+  recognition.lang = "en-US";
+  recognition.interimResults = false;
+  recognition.onresult = (e) => {
+    const text = e.results[0][0].transcript;
+    document.getElementById("chatInput").value = text;
+    stopVoiceInput();
+    setTimeout(() => sendMessage(), 300);
+  };
+  recognition.onerror = (e) => {
+    stopVoiceInput();
+    if (e.error !== "aborted") showToast("Voice recognition failed", "error");
+  };
+  recognition.onend = () => stopVoiceInput();
+  recognition.start();
+  isMicListening = true;
+  const btn = document.getElementById("micBtn");
+  btn.classList.add("listening");
+  btn.textContent = "⏹";
+}
+
+function stopVoiceInput() {
+  isMicListening = false;
+  if (recognition) { try { recognition.stop(); } catch {} }
+  const btn = document.getElementById("micBtn");
+  btn.classList.remove("listening");
+  btn.textContent = "\u{1F3A4}";
+}
+
+// ── End conversation & Evaluate ──
+async function endConversation() {
+  chatHistory = chatHistory.filter(m => m.speaker === "user" || m.speaker === "examiner");
+  if (chatHistory.length < 3) { showToast("Conversation too short to evaluate", "error"); return; }
+  await runEvaluation();
+}
+
+async function runEvaluation() {
+  showView("eval");
+  document.getElementById("evalContent").innerHTML = `<div class="loading"><div class="dots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div><p style="color:#8899aa;margin-top:12px;font-size:0.85rem">Evaluating your performance...</p></div>`;
+
+  const transcript = chatHistory.length > 0
+    ? chatHistory.filter(m => m.speaker === "user" || m.speaker === "examiner")
+    : voiceTranscript.filter(m => m.speaker === "user" || m.speaker === "examiner");
+
+  try {
+    const resp = await fetch("/api/evaluate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode: currentMode, transcript })
+    });
+    const data = await resp.json();
+    if (!resp.ok) { showToast(data.error, "error"); return; }
+
+    // Save to history
+    saveToHistory(transcript, data);
+    renderEvaluation(data, transcript);
+  } catch (e) {
+    showToast("Evaluation failed", "error");
+  }
+}
+
+function saveToHistory(transcript, evalData) {
+  const items = loadHistory();
+  items.unshift({
+    id: Date.now().toString(),
+    mode: currentMode,
+    interaction: currentInteraction,
+    topic: currentTopic || "General",
+    date: new Date().toISOString(),
+    transcript,
+    corrections: evalData.corrections || [],
+    scores: evalData.scores || {},
+    summary: evalData.summary || "",
+    naturalExpressions: evalData.naturalExpressions || [],
+    recommendations: evalData.recommendations || [],
+    nextTopics: evalData.nextTopics || []
+  });
+  if (items.length > MAX_ITEMS) items.length = MAX_ITEMS;
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(items)); } catch {}
+}
+
+function renderEvaluation(data, transcript) {
+  const s = data.scores || {};
+  document.getElementById("evalContent").innerHTML = `
+    <div class="eval-score-circle">
+      <span class="score">${s.fluency ? ((s.fluency + s.vocabulary + s.grammar + s.pronunciation) / 4).toFixed(1) : "?"}</span>
+      <span class="label">Overall</span>
+    </div>
+    <div class="eval-sub-scores">
+      <div class="eval-sub-score"><div class="val">${s.fluency||"-"}</div>Fluency</div>
+      <div class="eval-sub-score"><div class="val">${s.vocabulary||"-"}</div>Vocabulary</div>
+      <div class="eval-sub-score"><div class="val">${s.grammar||"-"}</div>Grammar</div>
+      <div class="eval-sub-score"><div class="val">${s.pronunciation||"-"}</div>Pronunciation</div>
+    </div>
+
+    ${data.summary ? `<div class="eval-section"><h4>\u{1F4DD} 综合评语</h4><p style="font-size:0.85rem;line-height:1.6">${escapeHtml(data.summary)}</p></div>` : ""}
+
+    ${data.corrections && data.corrections.length > 0 ? `
+    <div class="eval-section">
+      <h4>\u{1F50D} 逐句批改</h4>
+      ${data.corrections.map(c => `
+        <div class="correction-item">
+          <span class="orig">✗ ${escapeHtml(c.original)}</span>
+          <span class="corr">✓ ${escapeHtml(c.corrected)}</span>
+          <span class="nat">\u{1F4AC} ${escapeHtml(c.natural)}</span>
+        </div>`).join("")}
+    </div>` : ""}
+
+    ${data.naturalExpressions && data.naturalExpressions.length > 0 ? `
+    <div class="eval-section">
+      <h4>✅ 地道表达清单</h4>
+      ${data.naturalExpressions.map(e => `
+        <div class="exp-item"><span>${escapeHtml(e)}</span><button class="speak-btn-small" onclick="speakExaminer('${escapeAttr(e)}')">\u{1F50A}</button></div>`).join("")}
+    </div>` : ""}
+
+    ${data.recommendations && data.recommendations.length > 0 ? `
+    <div class="eval-section">
+      <h4>\u{1F4AA} 改进建议</h4>
+      ${data.recommendations.map(r => `<div style="font-size:0.8rem;margin-bottom:4px">• ${escapeHtml(r)}</div>`).join("")}
+    </div>` : ""}
+
+    ${data.nextTopics && data.nextTopics.length > 0 ? `
+    <div class="eval-section">
+      <h4>\u{1F4C5} 下次话题推荐</h4>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">${data.nextTopics.map(t => `<span style="font-size:0.75rem;background:#1a2a3a;padding:4px 10px;border-radius:8px">${escapeHtml(t)}</span>`).join("")}</div>
+    </div>` : ""}
+
+    <div class="eval-actions">
+      <button class="btn-back" onclick="goHome()">返回首页</button>
+    </div>`;
+}
+
+// ── Voice Mode (B) ──
+function startVoice() {
+  currentInteraction = "voice";
+  if (currentMode === "ielts-topics") { showTopicPicker("voice"); return; }
+  initVoice();
+}
+
+async function initVoice() {
+  showView("voice");
+  voiceTranscript = [];
+  document.getElementById("voicePhaseTag").textContent = currentMode === "mock-test" ? "Part 1" : (currentTopic || "Free Talk");
+  document.getElementById("voiceStatus").textContent = "考官正在提问...";
+
+  const greeting = currentMode === "free-talk"
+    ? "Hi there! I'm James. What would you like to chat about today?"
+    : currentMode === "ielts-topics"
+    ? `Let's talk about ${currentTopic}. I'll ask you a few questions.`
+    : "Good morning. My name is James Mitchell. Let's start with Part 1. Can you tell me a bit about yourself?";
+
+  voiceTranscript.push({ speaker: "examiner", text: greeting });
+  await speakExaminer(greeting);
+
+  document.getElementById("voiceStatus").textContent = "请回答...";
+  startVoiceListening();
+}
+
+function startVoiceListening() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { showToast("Browser doesn't support voice recognition", "error"); return; }
+  const rec = new SR();
+  rec.lang = "en-US";
+  rec.interimResults = false;
+  rec.onresult = async (e) => {
+    const text = e.results[0][0].transcript;
+    voiceTranscript.push({ speaker: "user", text });
+    document.getElementById("voiceStatus").textContent = "考官思考中...";
+    await processVoiceTurn(text);
+  };
+  rec.onerror = () => document.getElementById("voiceStatus").textContent = "请再试一次...";
+  rec.onend = () => {};
+  rec.start();
+}
+
+async function processVoiceTurn(userText) {
+  try {
+    const resp = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode: currentMode, topic: currentTopic, message: userText, history: voiceTranscript.slice(0, -1) })
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error);
+
+    voiceTranscript.push({ speaker: "examiner", text: data.reply });
+
+    document.getElementById("voiceStatus").textContent = "考官回答中...";
+    await speakExaminer(data.reply);
+
+    document.getElementById("voiceStatus").textContent = "请回答...";
+    startVoiceListening();
+  } catch (e) {
+    document.getElementById("voiceStatus").textContent = "出错，点击重试";
+  }
+}
+
+async function endVoiceConversation() {
+  window.speechSynthesis && speechSynthesis.cancel();
+  if (voiceTranscript.length < 3) { showToast("Conversation too short", "error"); return; }
+  document.getElementById("voiceStatus").textContent = "评估中...";
+  await runEvaluation();
+}
+
+function goHome() {
+  showView("home");
+  renderModeCards();
+}
+
+// ── History ──
+function loadHistory() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; } catch { return []; }
+}
+
+function renderHistory() {
+  const query = (document.getElementById("historySearch").value || "").trim().toLowerCase();
+  let items = loadHistory();
+  if (query) {
+    items = items.filter(i =>
+      i.topic.toLowerCase().includes(query) ||
+      i.mode.includes(query) ||
+      (i.date || "").includes(query)
+    );
+  }
+
+  document.getElementById("historyCount").textContent = query
+    ? `"${query}" — ${items.length} records` : `${items.length} records`;
+
+  const list = document.getElementById("historyList");
+  if (!items.length) { list.innerHTML = '<div class="empty">No records yet</div>'; return; }
+
+  list.innerHTML = items.map(item => {
+    const d = new Date(item.date);
+    const dateStr = d.toLocaleString("zh-CN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+    const modeLabel = { "free-talk": "Free Talk", "ielts-topics": "IELTS Topic", "mock-test": "Mock Test" }[item.mode] || item.mode;
+    const avgScore = item.scores && item.scores.fluency
+      ? ((item.scores.fluency + item.scores.vocabulary + item.scores.grammar + item.scores.pronunciation) / 4).toFixed(1)
+      : null;
+    return `
+      <div class="history-card" onclick="viewHistoryDetail('${item.id}')">
+        <div class="top">
+          <span class="date">${dateStr}</span>
+          <span class="mode-tag ${item.mode}">${modeLabel}</span>
+        </div>
+        <div class="topic">${escapeHtml(item.topic)} · ${item.interaction === "voice" ? "\u{1F399}️" : "\u{1F4AC}"}</div>
+        ${avgScore ? `<div class="scores">Overall: ${avgScore}</div>` : ""}
+      </div>`;
+  }).join("");
+}
+
+function viewHistoryDetail(id) {
+  const items = loadHistory();
+  const item = items.find(i => i.id === id);
+  if (!item) return;
+
+  showView("detail");
+  const s = item.scores || {};
+  const avgScore = s.fluency ? ((s.fluency + s.vocabulary + s.grammar + s.pronunciation) / 4).toFixed(1) : "?";
+
+  document.getElementById("detailContent").innerHTML = `
+    <button class="back-btn" onclick="switchTab('history')">← 返回记录</button>
+    <div class="eval-score-circle">
+      <span class="score">${avgScore}</span><span class="label">Overall</span>
+    </div>
+    <div class="eval-sub-scores">
+      <div class="eval-sub-score"><div class="val">${s.fluency||"-"}</div>Fluency</div>
+      <div class="eval-sub-score"><div class="val">${s.vocabulary||"-"}</div>Vocabulary</div>
+      <div class="eval-sub-score"><div class="val">${s.grammar||"-"}</div>Grammar</div>
+      <div class="eval-sub-score"><div class="val">${s.pronunciation||"-"}</div>Pronunciation</div>
+    </div>
+
+    ${item.summary ? `<div class="eval-section"><h4>\u{1F4DD} 综合评语</h4><p style="font-size:0.85rem;line-height:1.6">${escapeHtml(item.summary)}</p></div>` : ""}
+
+    ${item.corrections && item.corrections.length > 0 ? `
+    <div class="eval-section"><h4>\u{1F50D} 逐句批改</h4>
+      ${item.corrections.map(c => `
+        <div class="correction-item">
+          <span class="orig">✗ ${escapeHtml(c.original)}</span>
+          <span class="corr">✓ ${escapeHtml(c.corrected)}</span>
+          <span class="nat">\u{1F4AC} ${escapeHtml(c.natural)}</span>
+        </div>`).join("")}
+    </div>` : ""}
+
+    ${item.naturalExpressions && item.naturalExpressions.length > 0 ? `
+    <div class="eval-section"><h4>✅ 地道表达</h4>
+      ${item.naturalExpressions.map(e => `<div class="exp-item"><span>${escapeHtml(e)}</span><button class="speak-btn-small" onclick="speakExaminer('${escapeAttr(e)}')">\u{1F50A}</button></div>`).join("")}
+    </div>` : ""}
+
+    <div class="eval-section"><h4>\u{1F4DD} 对话记录</h4>
+      ${(item.transcript || []).map(t => `<div style="font-size:0.8rem;margin-bottom:6px"><b style="color:${t.speaker==='examiner'?'#c9a84c':'#667'}">${t.speaker==='examiner'?'James':'You'}:</b> ${escapeHtml(t.text.substring(0,200))}</div>`).join("")}
+    </div>`;
+}
+
+// ── Helpers ──
+function escapeHtml(s) { const d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
+function escapeAttr(s) { return s.replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/"/g, "&quot;"); }
+
+// ── Keyboard enter to send ──
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey && document.getElementById("chatInput") === document.activeElement) {
+    e.preventDefault(); sendMessage();
+  }
+});
+
+// ── Init ──
+renderModeCards();
 </script>
 </body>
 </html>
