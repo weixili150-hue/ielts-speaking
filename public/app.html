@@ -1054,14 +1054,14 @@ function toggleVoiceInput() {
         stopVoiceInput();
         sendMessage();
       }
-    }, 3500);
+    }, 5000);
     // Show countdown hint
     let cd = document.getElementById("silenceCountdown");
     if (!cd) {
       cd = document.createElement("div");
       cd.id = "silenceCountdown";
       cd.className = "silence-countdown";
-      cd.textContent = "静音3.5秒后自动发送...（继续说话可取消）";
+      cd.textContent = "静音5秒后自动发送...（继续说话可取消）";
       document.querySelector(".chat-input-area").before(cd);
     }
   };
@@ -1140,13 +1140,13 @@ function retryRecording() {
           stopVoiceInput();
           sendMessage();
         }
-      }, 3500);
+      }, 5000);
       let cd2 = document.getElementById("silenceCountdown");
       if (!cd2) {
         cd2 = document.createElement("div");
         cd2.id = "silenceCountdown";
         cd2.className = "silence-countdown";
-        cd2.textContent = "静音3.5秒后自动发送...（继续说话可取消）";
+        cd2.textContent = "静音5秒后自动发送...（继续说话可取消）";
         document.querySelector(".chat-input-area").before(cd2);
       }
     };
@@ -1380,7 +1380,7 @@ function startVoiceListening() {
       voiceTranscript.push({ speaker: "user", text });
       document.getElementById("voiceStatus").textContent = "考官思考中...";
       await processVoiceTurn(text);
-    }, 3500);
+    }, 5000);
   };
 
   rec.onerror = (e) => {

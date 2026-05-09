@@ -173,8 +173,8 @@ Scores must be realistic (1-9 range, 0.5 increments).
     const tcwLen = (result.transcriptWithChinese && result.transcriptWithChinese.length) || 0;
     console.log("transcriptWithChinese entries:", tcwLen, "| transcript sent:", transcript.length);
 
-    // Always translate summary to Chinese for reliability
-    if (result.summary) {
+    // Ensure summaryChinese always exists
+    if (result.summary && !result.summaryChinese) {
       console.log("Translating summary to Chinese...");
       try {
         const tBody = {
@@ -182,24 +182,29 @@ Scores must be realistic (1-9 range, 0.5 increments).
           max_tokens: 500,
           temperature: 0.3,
           messages: [
-            { role: "system", content: "Translate the following English text into natural Chinese. Return ONLY the Chinese translation, nothing else." },
+            { role: "system", content: "You are a translator. Translate the following English text into natural, fluent Chinese. Return ONLY the Chinese text, no explanations." },
             { role: "user", content: result.summary }
           ]
         };
-        const tResp = await fetch(API_BASE + "/chat/completions", {
+        const tResp = await fetch(`${API_BASE}/chat/completions`, {
           method: "POST",
-          headers: { "Content-Type": "application/json", "Authorization": "Bearer " + API_KEY },
+          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${API_KEY}` },
           body: JSON.stringify(tBody)
         });
         const tData = await tResp.json();
-        if (tResp.ok) {
+        if (tResp.ok && tData.choices && tData.choices[0]) {
           result.summaryChinese = tData.choices[0].message.content.trim();
-          console.log("summaryChinese:", result.summaryChinese.substring(0, 60));
+          console.log("summaryChinese translated:", result.summaryChinese.substring(0, 60));
+        } else {
+          console.log("Translation API error:", JSON.stringify(tData).slice(0, 200));
         }
       } catch (te) {
-        console.error("Translation failed:", te.message);
+        console.error("Translation fallback error:", te.message);
+        result.summaryChinese = "";
       }
     }
+    // Final safety: ensure summaryChinese is at least an empty string
+    if (!result.summaryChinese) result.summaryChinese = "";
 
     res.json(result);
   } catch (e) {
