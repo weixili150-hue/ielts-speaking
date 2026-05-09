@@ -274,6 +274,105 @@ body {
 .interaction-choice .choice-card:active { border-color: #c9a84c; }
 .interaction-choice .choice-card h4 { font-size: 0.9rem; margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
 .interaction-choice .choice-card p { font-size: 0.75rem; color: #8899aa; line-height: 1.5; }
+
+/* ── Settings ── */
+.home-header { display: flex; justify-content: space-between; align-items: flex-start; }
+.btn-settings {
+  background: none; border: none; font-size: 1.3rem; cursor: pointer;
+  color: #556; padding: 0 4px; -webkit-tap-highlight-color: transparent;
+}
+.btn-settings:active { color: #c9a84c; }
+
+.settings-overlay {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.75); z-index: 200;
+  display: flex; align-items: center; justify-content: center;
+  animation: fadeIn 0.2s ease;
+}
+.settings-panel {
+  background: #1a2530; border: 1px solid #2a3a4a; border-radius: 16px;
+  padding: 24px; width: 90%; max-width: 360px;
+}
+.settings-panel h3 { font-size: 1rem; color: #fff; margin-bottom: 20px; }
+.setting-row {
+  margin-bottom: 18px;
+}
+.setting-row .row-label { font-size: 0.75rem; color: #8899aa; margin-bottom: 6px; display: block; }
+.setting-row .option-group { display: flex; gap: 8px; flex-wrap: wrap; }
+.setting-row .option-btn {
+  flex: 1; min-width: 60px; padding: 8px 12px; border-radius: 8px;
+  border: 1px solid #2a3a4a; background: #0d1520; color: #8899aa;
+  font-size: 0.8rem; cursor: pointer; text-align: center;
+  -webkit-tap-highlight-color: transparent;
+}
+.setting-row .option-btn.selected { border-color: #c9a84c; color: #c9a84c; background: #1a2a10; }
+
+.setting-row input[type=range] {
+  width: 100%; accent-color: #c9a84c; height: 6px;
+}
+.speed-labels { display: flex; justify-content: space-between; font-size: 0.65rem; color: #556; margin-top: 2px; }
+
+.btn-save-settings {
+  width: 100%; padding: 12px; background: linear-gradient(135deg, #c9a84c, #e8c969);
+  color: #0f1923; border: none; border-radius: 10px; font-size: 0.9rem;
+  font-weight: 600; cursor: pointer; margin-top: 8px;
+  -webkit-tap-highlight-color: transparent;
+}
+.btn-close-settings {
+  width: 100%; padding: 10px; background: none; color: #8899aa;
+  border: none; font-size: 0.8rem; cursor: pointer; margin-top: 4px;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ── Interrupt Button ── */
+.btn-interrupt {
+  font-size: 0.85rem; color: #c9a84c; background: #1a2a10;
+  border: 1px solid #c9a84c33; padding: 6px 10px; border-radius: 8px;
+  cursor: pointer; display: none; align-items: center; gap: 3px;
+  -webkit-tap-highlight-color: transparent;
+}
+.btn-interrupt.visible { display: inline-flex; }
+@keyframes pulseInterrupt {
+  0%, 100% { border-color: #c9a84c33; }
+  50% { border-color: #c9a84c; box-shadow: 0 0 8px #c9a84c44; }
+}
+.btn-interrupt.pulsing { animation: pulseInterrupt 1.2s ease-in-out infinite; }
+
+.voice-interrupt-area { margin-top: 20px; }
+.btn-voice-interrupt {
+  padding: 14px 28px; background: #1a2a10; color: #e74c3c;
+  border: 2px solid #e74c3c44; border-radius: 50px; font-size: 1rem;
+  cursor: pointer; display: none; align-items: center; gap: 6px;
+  -webkit-tap-highlight-color: transparent; font-weight: 600;
+}
+.btn-voice-interrupt.visible { display: inline-flex; }
+@keyframes pulseVoice {
+  0%, 100% { border-color: #e74c3c44; box-shadow: 0 0 10px #e74c3c22; }
+  50% { border-color: #e74c3c; box-shadow: 0 0 20px #e74c3c55; }
+}
+.btn-voice-interrupt.pulsing { animation: pulseVoice 1s ease-in-out infinite; }
+
+/* ── Ready to Speak Indicator ── */
+@keyframes pulseGold {
+  0%, 100% { box-shadow: 0 0 0px #c9a84c00; }
+  50% { box-shadow: 0 0 12px #c9a84c66; }
+}
+.btn-mic.ready { animation: pulseGold 1.5s ease-in-out infinite; background: #1a2a10; border: 1px solid #c9a84c; }
+.chat-input-area textarea.ready { border-color: #c9a84c; box-shadow: 0 0 6px #c9a84c33; }
+
+.ready-hint {
+  text-align: center; font-size: 0.75rem; color: #c9a84c;
+  padding: 6px 0; animation: fadeIn 0.3s ease;
+}
+
+.voice-status.ready { color: #27ae60; font-weight: 600; }
+@keyframes pulseAvatar {
+  0%, 100% { box-shadow: 0 0 0px #c9a84c00; }
+  50% { box-shadow: 0 0 16px #c9a84c66; }
+}
+.voice-avatar.ready { animation: pulseAvatar 1.5s ease-in-out infinite; }
+
+.voice-animation .bar.ready { background: #27ae60; }
 </style>
 </head>
 <body>
@@ -281,9 +380,49 @@ body {
   <!-- HOME -->
   <div class="view active" id="view-home">
     <div class="home">
-      <h2>🏆 我是世界口活冠军</h2>
-      <p class="subtitle">James Mitchell · IELTS Examiner · 15 years</p>
+      <div class="home-header">
+        <div>
+          <h2>🏆 我是世界口活冠军</h2>
+          <p class="subtitle">James Mitchell · IELTS Examiner · 15 years</p>
+        </div>
+        <button class="btn-settings" onclick="openSettings()" title="发音设置">⚙️</button>
+      </div>
       <div class="mode-cards"></div>
+    </div>
+  </div>
+
+  <!-- SETTINGS OVERLAY -->
+  <div class="settings-overlay" id="settingsOverlay" style="display:none">
+    <div class="settings-panel">
+      <h3>⚙️ 发音设置</h3>
+
+      <div class="setting-row">
+        <span class="row-label">口音 Accent</span>
+        <div class="option-group">
+          <button class="option-btn" data-key="accent" data-val="british" onclick="pickSetting(this)">🇬🇧 British</button>
+          <button class="option-btn" data-key="accent" data-val="american" onclick="pickSetting(this)">🇺🇸 American</button>
+        </div>
+      </div>
+
+      <div class="setting-row">
+        <span class="row-label">性别 Gender</span>
+        <div class="option-group">
+          <button class="option-btn" data-key="gender" data-val="male" onclick="pickSetting(this)">👨 Male</button>
+          <button class="option-btn" data-key="gender" data-val="female" onclick="pickSetting(this)">👩 Female</button>
+        </div>
+      </div>
+
+      <div class="setting-row">
+        <span class="row-label" style="display:flex;justify-content:space-between">
+          <span>语速 Speed</span>
+          <span id="speedVal" style="color:#c9a84c">1x</span>
+        </span>
+        <input type="range" id="speedSlider" min="0.5" max="1.5" step="0.05" value="1" oninput="updateSpeedLabel(this.value)">
+        <div class="speed-labels"><span>0.5x</span><span>1x</span><span>1.5x</span></div>
+      </div>
+
+      <button class="btn-save-settings" onclick="saveSettings()">保存设置</button>
+      <button class="btn-close-settings" onclick="closeSettings()">取消</button>
     </div>
   </div>
 
@@ -295,6 +434,7 @@ body {
         <div class="info"><div class="name">James Mitchell</div><div class="role">IELTS Examiner</div></div>
         <span class="phase" id="phaseTag"></span>
         <button class="btn-end" onclick="endConversation()">结束</button>
+        <button class="btn-interrupt" id="chatInterruptBtn" onclick="interruptSpeech()" title="中断考官发音">⏹ 停止</button>
       </div>
       <div class="chat-messages" id="chatMessages"></div>
       <div class="chat-input-area">
@@ -313,6 +453,9 @@ body {
       <div class="voice-status" id="voiceStatus">准备开始</div>
       <div class="voice-animation" id="voiceAnimation">
         <div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div>
+      </div>
+      <div class="voice-interrupt-area">
+        <button class="btn-voice-interrupt" id="voiceInterruptBtn" onclick="interruptSpeech()">⏹ 停止考官说话</button>
       </div>
       <button class="voice-btn-end" onclick="endVoiceConversation()">结束对话</button>
     </div>
@@ -360,6 +503,21 @@ let chatHistory = [];
 let voiceTranscript = [];
 let isMicListening = false;
 let recognition = null;
+
+// ── Voice Settings ──
+const SETTINGS_KEY = "ielts-speaking-settings";
+const DEFAULT_SETTINGS = { accent: "british", gender: "male", speed: 1.0 };
+let voiceSettings = loadVoiceSettings();
+
+function loadVoiceSettings() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(SETTINGS_KEY));
+    if (stored && typeof stored.accent === "string" && typeof stored.gender === "string" && typeof stored.speed === "number") {
+      return stored;
+    }
+  } catch {}
+  return { ...DEFAULT_SETTINGS };
+}
 
 // ── IELTS Topics ──
 const IELTS_TOPICS = [
@@ -411,6 +569,49 @@ function renderModeCards() {
       <p>${m.desc}</p>
     </div>`).join("");
 }
+
+function openSettings() {
+  const overlay = document.getElementById("settingsOverlay");
+  overlay.style.display = "flex";
+  document.querySelectorAll('[data-key="accent"]').forEach(b =>
+    b.classList.toggle("selected", b.dataset.val === voiceSettings.accent)
+  );
+  document.querySelectorAll('[data-key="gender"]').forEach(b =>
+    b.classList.toggle("selected", b.dataset.val === voiceSettings.gender)
+  );
+  const slider = document.getElementById("speedSlider");
+  slider.value = voiceSettings.speed;
+  updateSpeedLabel(voiceSettings.speed);
+}
+
+function closeSettings() {
+  document.getElementById("settingsOverlay").style.display = "none";
+}
+
+function pickSetting(btn) {
+  const key = btn.dataset.key;
+  const val = btn.dataset.val;
+  document.querySelectorAll(`[data-key="${key}"]`).forEach(b => b.classList.remove("selected"));
+  btn.classList.add("selected");
+  if (key === "accent") voiceSettings.accent = val;
+  if (key === "gender") voiceSettings.gender = val;
+}
+
+function updateSpeedLabel(val) {
+  document.getElementById("speedVal").textContent = parseFloat(val).toFixed(2) + "x";
+  voiceSettings.speed = parseFloat(val);
+}
+
+function saveSettings() {
+  try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(voiceSettings)); } catch {}
+  closeSettings();
+  showToast("Voice settings saved", "success");
+}
+
+// Close settings on overlay background click
+document.addEventListener("click", (e) => {
+  if (e.target.id === "settingsOverlay") closeSettings();
+});
 
 function selectMode(mode) {
   currentMode = mode;
@@ -482,9 +683,11 @@ async function initChat() {
 
   addMessage("examiner", greeting);
   await speakExaminer(greeting);
+  showReadyIndicator();
 }
 
 async function sendMessage() {
+  clearReadyIndicator();
   const input = document.getElementById("chatInput");
   const text = input.value.trim();
   if (!text) return;
@@ -512,6 +715,7 @@ async function sendMessage() {
     }
 
     await speakExaminer(data.reply);
+    showReadyIndicator();
   } catch (e) { typing.remove(); showToast("Network error", "error"); }
 }
 
@@ -555,22 +759,127 @@ function addTyping() {
   return { remove: () => div.remove() };
 }
 
-// ── Examiner TTS ──
-async function speakExaminer(text) {
-  if (!window.speechSynthesis) return;
-  window.speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance(text);
-  u.lang = "en-GB";
-  u.rate = 0.88;
+// ── Examiner TTS (with voice settings) ──
+function getVoiceForSettings() {
   const voices = speechSynthesis.getVoices();
-  const gb = voices.find(v => v.lang === "en-GB") || voices.find(v => v.lang.startsWith("en-GB")) || voices.find(v => v.lang.startsWith("en"));
-  if (gb) u.voice = gb;
-  speechSynthesis.speak(u);
+  if (!voices.length) return null;
+
+  const lang = voiceSettings.accent === "american" ? "en-US" : "en-GB";
+  const isMale = voiceSettings.gender === "male";
+
+  let candidates = voices.filter(v => v.lang === lang || v.lang.startsWith(lang + "-"));
+  if (!candidates.length) {
+    candidates = voices.filter(v => v.lang.startsWith("en"));
+  }
+  if (!candidates.length) return voices[0];
+
+  const maleNames = /\b(Daniel|Tom|Alex|Fred|Arthur|Oliver|Gordon|Bruce|Henry|George|David|James|John|Michael|Robert|William)\b/i;
+  const femaleNames = /\b(Samantha|Karen|Susan|Fiona|Moira|Martha|Catherine|Victoria|Kate|Alice|Emily|Amy|Lisa|Mary|Linda|Barbara|Patricia|Jennifer|Elizabeth|Sarah)\b/i;
+
+  const genderedVoices = candidates.filter(v => {
+    if (isMale) return maleNames.test(v.name);
+    else return femaleNames.test(v.name);
+  });
+
+  if (genderedVoices.length > 0) {
+    const exact = genderedVoices.find(v => v.lang === lang);
+    return exact || genderedVoices[0];
+  }
+
+  const exact = candidates.find(v => v.lang === lang);
+  return exact || candidates[0];
+}
+
+async function speakExaminer(text) {
+  if (!window.speechSynthesis || !text) return;
+  window.speechSynthesis.cancel();
+
+  const voice = getVoiceForSettings();
+  const lang = voiceSettings.accent === "american" ? "en-US" : "en-GB";
+
+  return new Promise((resolve) => {
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = lang;
+    u.rate = voiceSettings.speed;
+    if (voice) u.voice = voice;
+
+    updateInterruptButtons(true);
+
+    u.onend = () => {
+      updateInterruptButtons(false);
+      resolve();
+    };
+    u.onerror = () => {
+      updateInterruptButtons(false);
+      resolve();
+    };
+
+    speechSynthesis.speak(u);
+  });
 }
 
 if (window.speechSynthesis) {
   speechSynthesis.getVoices();
   speechSynthesis.onvoiceschanged = () => speechSynthesis.getVoices();
+}
+
+// ── Interrupt Speech ──
+function interruptSpeech() {
+  if (window.speechSynthesis) {
+    window.speechSynthesis.cancel();
+  }
+  updateInterruptButtons(false);
+}
+
+function updateInterruptButtons(show) {
+  const chatBtn = document.getElementById("chatInterruptBtn");
+  const voiceBtn = document.getElementById("voiceInterruptBtn");
+  if (chatBtn) { chatBtn.classList.toggle("visible", show); chatBtn.classList.toggle("pulsing", show); }
+  if (voiceBtn) { voiceBtn.classList.toggle("visible", show); voiceBtn.classList.toggle("pulsing", show); }
+}
+
+// ── Ready-to-Speak Indicator ──
+function showReadyIndicator() {
+  if (currentInteraction === "chat") {
+    const micBtn = document.getElementById("micBtn");
+    if (micBtn && !isMicListening) micBtn.classList.add("ready");
+    const input = document.getElementById("chatInput");
+    if (input) input.classList.add("ready");
+
+    if (!document.getElementById("readyHint")) {
+      const hint = document.createElement("div");
+      hint.id = "readyHint";
+      hint.className = "ready-hint";
+      hint.textContent = "\u{1F399}️ Your turn — 请说话";
+      const chatMessages = document.getElementById("chatMessages");
+      chatMessages.appendChild(hint);
+      hint.scrollIntoView({ behavior: "smooth" });
+    }
+  } else if (currentInteraction === "voice") {
+    const status = document.getElementById("voiceStatus");
+    if (status) {
+      status.textContent = "\u{1F7E2} 请回答...";
+      status.classList.add("ready");
+    }
+    const avatar = document.getElementById("voiceAvatar");
+    if (avatar) avatar.classList.add("ready");
+    document.querySelectorAll(".voice-animation .bar").forEach(b => b.classList.add("ready"));
+  }
+}
+
+function clearReadyIndicator() {
+  const micBtn = document.getElementById("micBtn");
+  if (micBtn) micBtn.classList.remove("ready");
+  const input = document.getElementById("chatInput");
+  if (input) input.classList.remove("ready");
+  const hint = document.getElementById("readyHint");
+  if (hint) hint.remove();
+
+  const status = document.getElementById("voiceStatus");
+  if (status) status.classList.remove("ready");
+  const avatar = document.getElementById("voiceAvatar");
+  if (avatar) avatar.classList.remove("ready");
+  document.querySelectorAll(".voice-animation .bar").forEach(b => b.classList.remove("ready"));
 }
 
 // ── Voice Input (STT) ──
@@ -594,6 +903,7 @@ function toggleVoiceInput() {
   recognition.onend = () => stopVoiceInput();
   recognition.start();
   isMicListening = true;
+  clearReadyIndicator();
   const btn = document.getElementById("micBtn");
   btn.classList.add("listening");
   btn.textContent = "⏹";
@@ -653,7 +963,8 @@ function saveToHistory(transcript, evalData) {
     summary: evalData.summary || "",
     naturalExpressions: evalData.naturalExpressions || [],
     recommendations: evalData.recommendations || [],
-    nextTopics: evalData.nextTopics || []
+    nextTopics: evalData.nextTopics || [],
+    transcriptWithChinese: evalData.transcriptWithChinese || []
   });
   if (items.length > MAX_ITEMS) items.length = MAX_ITEMS;
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(items)); } catch {}
@@ -705,6 +1016,19 @@ function renderEvaluation(data, transcript) {
       <div style="display:flex;flex-wrap:wrap;gap:6px">${data.nextTopics.map(t => `<span style="font-size:0.75rem;background:#1a2a3a;padding:4px 10px;border-radius:8px">${escapeHtml(t)}</span>`).join("")}</div>
     </div>` : ""}
 
+    ${data.transcriptWithChinese && data.transcriptWithChinese.length > 0 ? `
+    <div class="eval-section">
+      <h4>\u{1F4DD} 完整对话记录（中英对照）</h4>
+      ${data.transcriptWithChinese.map(t => `
+        <div style="margin-bottom:10px;padding:8px;background:#0d1520;border-radius:8px">
+          <div style="font-size:0.7rem;color:${t.speaker==='examiner'?'#c9a84c':'#667'};margin-bottom:3px">
+            ${t.speaker === 'examiner' ? '\u{1F468}\u{200D}\u{1F3EB} James' : '\u{1F9D1} You'}
+          </div>
+          <div style="font-size:0.85rem;color:#e0e8f0;line-height:1.5">${escapeHtml(t.english)}</div>
+          <div style="font-size:0.75rem;color:#8899aa;line-height:1.4;margin-top:2px">${escapeHtml(t.chinese)}</div>
+        </div>`).join("")}
+    </div>` : ""}
+
     <div class="eval-actions">
       <button class="btn-back" onclick="goHome()">返回首页</button>
     </div>`;
@@ -731,12 +1055,14 @@ async function initVoice() {
 
   voiceTranscript.push({ speaker: "examiner", text: greeting });
   await speakExaminer(greeting);
+  showReadyIndicator();
 
   document.getElementById("voiceStatus").textContent = "请回答...";
   startVoiceListening();
 }
 
 function startVoiceListening() {
+  clearReadyIndicator();
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) { showToast("Browser doesn't support voice recognition", "error"); return; }
   const rec = new SR();
@@ -767,6 +1093,7 @@ async function processVoiceTurn(userText) {
 
     document.getElementById("voiceStatus").textContent = "考官回答中...";
     await speakExaminer(data.reply);
+    showReadyIndicator();
 
     document.getElementById("voiceStatus").textContent = "请回答...";
     startVoiceListening();
@@ -777,6 +1104,7 @@ async function processVoiceTurn(userText) {
 
 async function endVoiceConversation() {
   window.speechSynthesis && speechSynthesis.cancel();
+  updateInterruptButtons(false);
   if (voiceTranscript.length < 3) { showToast("Conversation too short", "error"); return; }
   document.getElementById("voiceStatus").textContent = "评估中...";
   await runEvaluation();
@@ -866,9 +1194,20 @@ function viewHistoryDetail(id) {
       ${item.naturalExpressions.map(e => `<div class="exp-item"><span>${escapeHtml(e)}</span><button class="speak-btn-small" onclick="speakExaminer('${escapeAttr(e)}')">\u{1F50A}</button></div>`).join("")}
     </div>` : ""}
 
+    ${item.transcriptWithChinese && item.transcriptWithChinese.length > 0 ? `
+    <div class="eval-section"><h4>\u{1F4DD} 完整对话记录（中英对照）</h4>
+      ${item.transcriptWithChinese.map(t => `
+        <div style="margin-bottom:10px;padding:8px;background:#0d1520;border-radius:8px">
+          <div style="font-size:0.7rem;color:${t.speaker==='examiner'?'#c9a84c':'#667'};margin-bottom:3px">
+            ${t.speaker === 'examiner' ? '\u{1F468}‍\u{1F3EB} James' : '\u{1F9D1} You'}
+          </div>
+          <div style="font-size:0.85rem;color:#e0e8f0;line-height:1.5">${escapeHtml(t.english)}</div>
+          <div style="font-size:0.75rem;color:#8899aa;line-height:1.4;margin-top:2px">${escapeHtml(t.chinese)}</div>
+        </div>`).join("")}
+    </div>` : `
     <div class="eval-section"><h4>\u{1F4DD} 对话记录</h4>
       ${(item.transcript || []).map(t => `<div style="font-size:0.8rem;margin-bottom:6px"><b style="color:${t.speaker==='examiner'?'#c9a84c':'#667'}">${t.speaker==='examiner'?'James':'You'}:</b> ${escapeHtml(t.text.substring(0,200))}</div>`).join("")}
-    </div>`;
+    </div>`}`;
 }
 
 // ── Helpers ──

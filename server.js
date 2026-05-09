@@ -112,15 +112,19 @@ Return ONLY valid JSON, no markdown, no other text:
     "Work on article usage (a/an/the)",
     "Practice present perfect for experiences"
   ],
-  "nextTopics": ["Technology", "Education"]
+  "nextTopics": ["Technology", "Education"],
+  "transcriptWithChinese": [
+    { "speaker": "examiner", "english": "What do you study?", "chinese": "你学什么？" },
+    { "speaker": "user", "english": "I study computer science.", "chinese": "我学计算机科学。" }
+  ]
 }
 
-Scores must be realistic (1-9 range, 0.5 increments). Corrections array: only include actual mistakes — if the candidate said something correctly, don't fabricate issues. naturalExpressions: 3-5 useful phrases the candidate should learn from this conversation.`;
+Scores must be realistic (1-9 range, 0.5 increments). Corrections array: only include actual mistakes — if the candidate said something correctly, don't fabricate issues. naturalExpressions: 3-5 useful phrases the candidate should learn from this conversation. transcriptWithChinese: translate EVERY exchange from the conversation into colloquial Chinese — each entry must have speaker ("examiner" or "user"), "english" (original text), and "chinese" (natural Chinese translation). Provide translations for ALL messages in the transcript.`;
 
   try {
     const body = {
       model: MODEL,
-      max_tokens: 3000,
+      max_tokens: 4000,
       temperature: 0.5,
       messages: [
         { role: "system", content: systemPrompt },
