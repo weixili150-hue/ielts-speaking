@@ -147,7 +147,11 @@ body {
 }
 .btn-send { background: linear-gradient(135deg, #c9a84c, #e8c969); color: #0f1923; }
 .btn-mic { background: #1a2a3a; color: #c9a84c; }
-.btn-mic.listening { background: #c0392b; color: #fff; }
+.btn-mic.listening { background: #c0392b; color: #fff; animation: pulseMic 1s ease-in-out infinite; }
+@keyframes pulseMic {
+  0%, 100% { box-shadow: 0 0 0px #c0392b00; }
+  50% { box-shadow: 0 0 14px #c0392b88; }
+}
 
 /* ── Voice conversation view ── */
 .voice-view {
@@ -767,14 +771,37 @@ function getVoiceForSettings() {
   const lang = voiceSettings.accent === "american" ? "en-US" : "en-GB";
   const isMale = voiceSettings.gender === "male";
 
-  let candidates = voices.filter(v => v.lang === lang || v.lang.startsWith(lang + "-"));
+  // Priority 1: local voices matching language (higher quality)
+  let candidates = voices.filter(v =>
+    v.localService && (v.lang === lang || v.lang.startsWith(lang))
+  );
+  // Priority 2: any voice matching language
+  if (!candidates.length) {
+    candidates = voices.filter(v => v.lang === lang || v.lang.startsWith(lang + "-"));
+  }
+  // Priority 3: any English voice
   if (!candidates.length) {
     candidates = voices.filter(v => v.lang.startsWith("en"));
   }
   if (!candidates.length) return voices[0];
 
-  const maleNames = /\b(Daniel|Tom|Alex|Fred|Arthur|Oliver|Gordon|Bruce|Henry|George|David|James|John|Michael|Robert|William)\b/i;
-  const femaleNames = /\b(Samantha|Karen|Susan|Fiona|Moira|Martha|Catherine|Victoria|Kate|Alice|Emily|Amy|Lisa|Mary|Linda|Barbara|Patricia|Jennifer|Elizabeth|Sarah)\b/i;
+  // Premium voice names (high-quality voices on macOS / Windows / Chrome)
+  const premiumMale = /\b(Daniel|Oliver|Arthur|Alex|Tom|Fred|Gordon|Ryan|Nathan|Liam|Noah)\b/i;
+  const premiumFemale = /\b(Samantha|Karen|Susan|Moira|Fiona|Martha|Catherine|Victoria|Kate|Alice|Emily|Amy|Lisa|Eva|Zira)\b/i;
+
+  // First, try premium voices matching gender
+  const premiumGendered = candidates.filter(v => {
+    if (isMale) return premiumMale.test(v.name);
+    else return premiumFemale.test(v.name);
+  });
+  if (premiumGendered.length > 0) {
+    const exact = premiumGendered.find(v => v.lang === lang);
+    return exact || premiumGendered[0];
+  }
+
+  // Fallback: any voice matching gender (using broader name patterns)
+  const maleNames = /\b(Daniel|Tom|Alex|Fred|Arthur|Oliver|Gordon|Bruce|Henry|George|David|James|John|Michael|Robert|William|Ryan|Nathan|Liam|Noah)\b/i;
+  const femaleNames = /\b(Samantha|Karen|Susan|Fiona|Moira|Martha|Catherine|Victoria|Kate|Alice|Emily|Amy|Lisa|Mary|Linda|Barbara|Patricia|Jennifer|Elizabeth|Sarah|Eva|Zira)\b/i;
 
   const genderedVoices = candidates.filter(v => {
     if (isMale) return maleNames.test(v.name);
@@ -800,7 +827,9 @@ async function speakExaminer(text) {
   return new Promise((resolve) => {
     const u = new SpeechSynthesisUtterance(text);
     u.lang = lang;
-    u.rate = voiceSettings.speed;
+    u.rate = voiceSettings.speed || 0.9;
+    u.pitch = 1.0;
+    u.volume = 1.0;
     if (voice) u.voice = voice;
 
     updateInterruptButtons(true);
@@ -886,27 +915,68 @@ function clearReadyIndicator() {
 function toggleVoiceInput() {
   if (isMicListening) { stopVoiceInput(); return; }
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) { showToast("Browser doesn't support speech recognition", "error"); return; }
+  if (!SR) { showToast("您的浏览器不支持语音识别，请使用 Chrome", "error"); return; }
+  clearReadyIndicator();
   recognition = new SR();
   recognition.lang = "en-US";
-  recognition.interimResults = false;
+  recognition.continuous = true;
+  recognition.interimResults = true;
+  recognition.maxAlternatives = 1;
+
   recognition.onresult = (e) => {
-    const text = e.results[0][0].transcript;
-    document.getElementById("chatInput").value = text;
-    stopVoiceInput();
-    setTimeout(() => sendMessage(), 300);
+    // Show interim result in the input field
+    let finalText = "";
+    let interimText = "";
+    for (let i = 0; i < e.results.length; i++) {
+      if (e.results[i].isFinal) {
+        finalText += e.results[i][0].transcript;
+      } else {
+        interimText += e.results[i][0].transcript;
+      }
+    }
+    const input = document.getElementById("chatInput");
+    if (finalText) {
+      input.value = finalText.trim();
+      stopVoiceInput();
+      setTimeout(() => { if (input.value.trim()) sendMessage(); }, 200);
+    } else if (interimText) {
+      input.value = interimText.trim();
+    }
   };
+
   recognition.onerror = (e) => {
+    const errors = {
+      "not-allowed": "请允许浏览器使用麦克风权限",
+      "no-speech": "",
+      "audio-capture": "未检测到麦克风设备",
+      "network": "网络连接失败，请检查网络",
+      "service-not-allowed": "语音服务不可用",
+      "bad-grammar": "语音识别配置错误",
+      "language-not-supported": "不支持当前语言"
+    };
+    const msg = errors[e.error];
+    if (msg) showToast(msg, "error");
+    if (e.error === "no-speech") {
+      // Silently restart
+      try { recognition.start(); } catch {}
+      return;
+    }
     stopVoiceInput();
-    if (e.error !== "aborted") showToast("Voice recognition failed", "error");
   };
-  recognition.onend = () => stopVoiceInput();
+
+  recognition.onend = () => {
+    // If user hasn't manually stopped, restart automatically
+    if (isMicListening && !document.getElementById("chatInput").value.trim()) {
+      try { recognition.start(); } catch { stopVoiceInput(); }
+    }
+  };
+
   recognition.start();
   isMicListening = true;
-  clearReadyIndicator();
   const btn = document.getElementById("micBtn");
   btn.classList.add("listening");
-  btn.textContent = "⏹";
+  btn.textContent = "⏺";
+  btn.title = "录音中，点击停止";
 }
 
 function stopVoiceInput() {
@@ -915,6 +985,7 @@ function stopVoiceInput() {
   const btn = document.getElementById("micBtn");
   btn.classList.remove("listening");
   btn.textContent = "\u{1F3A4}";
+  btn.title = "语音输入";
 }
 
 // ── End conversation & Evaluate ──
@@ -1064,19 +1135,54 @@ async function initVoice() {
 function startVoiceListening() {
   clearReadyIndicator();
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) { showToast("Browser doesn't support voice recognition", "error"); return; }
+  if (!SR) { showToast("您的浏览器不支持语音识别，请使用 Chrome", "error"); return; }
   const rec = new SR();
   rec.lang = "en-US";
-  rec.interimResults = false;
+  rec.continuous = true;
+  rec.interimResults = true;
+  rec.maxAlternatives = 1;
+
+  let finalSpoken = "";
   rec.onresult = async (e) => {
-    const text = e.results[0][0].transcript;
-    voiceTranscript.push({ speaker: "user", text });
-    document.getElementById("voiceStatus").textContent = "考官思考中...";
-    await processVoiceTurn(text);
+    let finalText = "";
+    let interimText = "";
+    for (let i = 0; i < e.results.length; i++) {
+      if (e.results[i].isFinal) {
+        finalText += e.results[i][0].transcript;
+      } else {
+        interimText += e.results[i][0].transcript;
+      }
+    }
+    if (finalText && finalText !== finalSpoken) {
+      finalSpoken = finalText;
+      try { rec.stop(); } catch {}
+      const text = finalText.trim();
+      voiceTranscript.push({ speaker: "user", text });
+      document.getElementById("voiceStatus").textContent = "考官思考中...";
+      await processVoiceTurn(text);
+    } else if (interimText) {
+      document.getElementById("voiceStatus").textContent = "\u{1F399}️ \u{1F7E2} 正在听..." + interimText.substring(0, 30);
+    }
   };
-  rec.onerror = () => document.getElementById("voiceStatus").textContent = "请再试一次...";
+
+  rec.onerror = (e) => {
+    const errors = {
+      "not-allowed": "请允许浏览器使用麦克风权限",
+      "audio-capture": "未检测到麦克风设备",
+      "network": "网络连接失败"
+    };
+    const msg = errors[e.error];
+    if (msg) showToast(msg, "error");
+    if (e.error === "no-speech") {
+      try { rec.start(); } catch {}
+      return;
+    }
+    document.getElementById("voiceStatus").textContent = "请再试一次...";
+  };
+
   rec.onend = () => {};
   rec.start();
+  document.getElementById("voiceStatus").textContent = "\u{1F399}️ \u{1F7E2} 正在听...";
 }
 
 async function processVoiceTurn(userText) {
