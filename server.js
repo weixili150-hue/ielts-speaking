@@ -172,6 +172,35 @@ Scores must be realistic (1-9 range, 0.5 increments).
     const result = JSON.parse(jsonStr);
     const tcwLen = (result.transcriptWithChinese && result.transcriptWithChinese.length) || 0;
     console.log("transcriptWithChinese entries:", tcwLen, "| transcript sent:", transcript.length);
+
+    // Fallback: if model omitted summaryChinese, translate summary
+    if (!result.summaryChinese && result.summary) {
+      console.log("summaryChinese missing, translating...");
+      try {
+        const tBody = {
+          model: MODEL,
+          max_tokens: 500,
+          temperature: 0.3,
+          messages: [
+            { role: "system", content: "Translate the following English text into natural Chinese. Return ONLY the Chinese translation, nothing else." },
+            { role: "user", content: result.summary }
+          ]
+        };
+        const tResp = await fetch(API_BASE + "/chat/completions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": "Bearer " + API_KEY },
+          body: JSON.stringify(tBody)
+        });
+        const tData = await tResp.json();
+        if (tResp.ok) {
+          result.summaryChinese = tData.choices[0].message.content.trim();
+          console.log("summaryChinese translated:", result.summaryChinese.substring(0, 60));
+        }
+      } catch (te) {
+        console.error("Translation fallback failed:", te.message);
+      }
+    }
+
     res.json(result);
   } catch (e) {
     console.error("Evaluate error:", e.message);
