@@ -115,16 +115,33 @@ Return ONLY valid JSON, no markdown, no other text:
   "nextTopics": ["Technology", "Education"],
   "transcriptWithChinese": [
     { "speaker": "examiner", "english": "What do you study?", "chinese": "你学什么？" },
-    { "speaker": "user", "english": "I study computer science.", "chinese": "我学计算机科学。" }
+    {
+      "speaker": "user",
+      "english": "I study computer science.",
+      "chinese": "我学计算机科学。",
+      "correction": { "original": "I study computer", "corrected": "I'm studying computer science", "natural": "I'm studying computer science at university", "explanation": "用现在进行时更自然" },
+      "naturalExpressions": ["I'm a computer science student.", "I'm currently in my second year of CS."],
+      "suggestion": "尝试使用现在进行时来描述正在进行的学业"
+    }
   ]
 }
 
-Scores must be realistic (1-9 range, 0.5 increments). Corrections array: only include actual mistakes — if the candidate said something correctly, don't fabricate issues. naturalExpressions: 3-5 useful phrases the candidate should learn from this conversation. transcriptWithChinese: translate EVERY exchange from the conversation into colloquial Chinese — each entry must have speaker ("examiner" or "user"), "english" (original text), and "chinese" (natural Chinese translation). Provide translations for ALL messages in the transcript.`;
+	Scores must be realistic (1-9 range, 0.5 increments).
+
+	CRITICAL: transcriptWithChinese is the MOST IMPORTANT field. You MUST include EVERY single exchange from the conversation — every examiner question and every user answer. Do NOT skip any turns, do NOT summarize. Each exchange = one entry in the array. The array length MUST match the full conversation.
+
+	For each examiner entry: include speaker/english/chinese only.
+	For each USER entry, you MUST include ALL of the following:
+	- "correction": if there's any grammar/vocabulary/word-choice issue, provide { original, corrected, natural, explanation } using the exact words the user said. If the sentence is perfect, set to null.
+	- "naturalExpressions": 1-3 better/more idiomatic ways to express what the user said. ALWAYS include this, even if correction is null.
+	- "suggestion": one short, actionable improvement tip in Chinese (e.g. "尝试用...代替..."). ALWAYS include this.
+
+	The top-level "corrections" and "naturalExpressions" arrays should summarize the most important ones across all sentences.`;
 
   try {
     const body = {
       model: MODEL,
-      max_tokens: 4000,
+      max_tokens: 12000,
       temperature: 0.5,
       messages: [
         { role: "system", content: systemPrompt },
@@ -146,11 +163,15 @@ Scores must be realistic (1-9 range, 0.5 increments). Corrections array: only in
     if (!resp.ok) throw new Error(`${resp.status} ${JSON.stringify(data).slice(0, 200)}`);
 
     const content = data.choices[0].message.content.trim();
+    console.log("Evaluate response length:", content.length, "chars");
     const jsonStr = content.replace(/^```json\s*/, "").replace(/```$/, "").trim();
     const result = JSON.parse(jsonStr);
+    const tcwLen = (result.transcriptWithChinese && result.transcriptWithChinese.length) || 0;
+    console.log("transcriptWithChinese entries:", tcwLen, "| transcript sent:", transcript.length);
     res.json(result);
   } catch (e) {
     console.error("Evaluate error:", e.message);
+    console.error("Raw content (first 300):", (content || "").substring(0, 300));
     res.status(500).json({ error: "Evaluation failed. Please try again." });
   }
 });
