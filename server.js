@@ -169,6 +169,7 @@ Scores must be realistic (1-9 range, 0.5 increments).
 
 	The top-level "corrections" and "naturalExpressions" arrays should summarize the most important ones across all sentences. "summary" MUST be in English. CRITICAL: "summaryChinese" MUST be a natural Chinese translation of the summary — NEVER omit this field, NEVER leave it empty.`;
 
+  let content;
   try {
     const body = {
       model: MODEL,
@@ -193,7 +194,7 @@ Scores must be realistic (1-9 range, 0.5 increments).
     const data = await resp.json();
     if (!resp.ok) throw new Error(`${resp.status} ${JSON.stringify(data).slice(0, 200)}`);
 
-    const content = data.choices[0].message.content.trim();
+    content = data.choices[0].message.content.trim();
     console.log("Evaluate response length:", content.length, "chars");
     const jsonStr = content.replace(/^```json\s*/, "").replace(/```$/, "").trim();
     const result = JSON.parse(jsonStr);
@@ -232,6 +233,17 @@ Scores must be realistic (1-9 range, 0.5 increments).
     }
     // Final safety: ensure summaryChinese is at least an empty string
     if (!result.summaryChinese) result.summaryChinese = "";
+
+    // Deduplicate transcriptWithChinese entries
+    if (result.transcriptWithChinese && result.transcriptWithChinese.length > 0) {
+      const seen = new Set();
+      result.transcriptWithChinese = result.transcriptWithChinese.filter(t => {
+        const key = (t.english || t.text || "").trim().toLowerCase();
+        if (!key || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+    }
 
     res.json(result);
   } catch (e) {

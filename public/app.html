@@ -801,16 +801,21 @@ async function sendMessage() {
   chatHistory.push({ speaker: "user", text });
 
   const typing = addTyping();
+  const controller = new AbortController();
+  pendingRequest = controller;
   try {
     const resp = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mode: currentMode, topic: currentTopic, message: text, history: chatHistory.slice(0, -1) })
+      body: JSON.stringify({ mode: currentMode, topic: currentTopic, message: text, history: chatHistory.slice(0, -1) }),
+      signal: controller.signal
     });
+    pendingRequest = null;
     const data = await resp.json();
     typing.remove();
 
     if (!resp.ok) { showToast(data.error || "Error", "error"); return; }
+    if (!conversationActive) return;
 
     addMessage("examiner", data.reply);
     chatHistory.push({ speaker: "examiner", text: data.reply });
@@ -819,10 +824,12 @@ async function sendMessage() {
       addCorrection(data.correction);
     }
 
-    await speakExaminer(data.reply);
+    if (conversationActive) {
+      await speakExaminer(data.reply);
+    }
     if (!conversationActive) return;
     showReadyIndicator();
-  } catch (e) { typing.remove(); showToast("Network error", "error"); }
+  } catch (e) { typing.remove(); pendingRequest = null; if (e.name !== "AbortError") showToast("Network error", "error"); }
 }
 
 function addMessage(speaker, text) {
@@ -1087,8 +1094,17 @@ function toggleVoiceInput() {
   };
 
   recognition.onend = () => {
-    // If user hasn't manually stopped, restart automatically
-    if (isMicListening && !document.getElementById("chatInput").value.trim()) {
+    // Always restart while listening — reset silence timer for fresh window
+    if (isMicListening) {
+      if (silenceTimer) clearTimeout(silenceTimer);
+      silenceTimer = setTimeout(() => {
+        if (document.getElementById("chatInput").value.trim()) {
+          const cd = document.getElementById("silenceCountdown");
+          if (cd) cd.remove();
+          stopVoiceInput();
+          sendMessage();
+        }
+      }, 5000);
       try { recognition.start(); } catch { stopVoiceInput(); }
     }
   };
@@ -1189,9 +1205,11 @@ function endCurrentTurn() {
 
 // ── End conversation & Evaluate ──
 let conversationActive = false;
+let pendingRequest = null;
 
 async function endConversation() {
   conversationActive = false;
+  if (pendingRequest) { pendingRequest.abort(); pendingRequest = null; }
   document.getElementById("chatInput").value = "";
   const cd6 = document.getElementById("silenceCountdown");
   if (cd6) cd6.remove();
@@ -1412,38 +1430,58 @@ function startVoiceListening() {
     document.getElementById("voiceStatus").textContent = "请再试一次...";
   };
 
-  rec.onend = () => {};
+  rec.onend = () => {
+    if (silenceTimer) clearTimeout(silenceTimer);
+    silenceTimer = setTimeout(async () => {
+      const text = voiceAccumulatedText.trim();
+      if (!text) return;
+      try { rec.stop(); } catch {}
+      document.getElementById("voiceRecordingActions").classList.remove("visible");
+      voiceTranscript.push({ speaker: "user", text });
+      document.getElementById("voiceStatus").textContent = "考官思考中...";
+      await processVoiceTurn(text);
+    }, 5000);
+  };
   rec.start();
   document.getElementById("voiceRecordingActions").classList.add("visible");
   document.getElementById("voiceStatus").textContent = "\u{1F399}️ \u{1F7E2} 正在听...";
 }
 
 async function processVoiceTurn(userText) {
+  const controller = new AbortController();
+  pendingRequest = controller;
   try {
     const resp = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mode: currentMode, topic: currentTopic, message: userText, history: voiceTranscript.slice(0, -1) })
+      body: JSON.stringify({ mode: currentMode, topic: currentTopic, message: userText, history: voiceTranscript.slice(0, -1) }),
+      signal: controller.signal
     });
+    pendingRequest = null;
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.error);
+    if (!conversationActive) return;
 
     voiceTranscript.push({ speaker: "examiner", text: data.reply });
 
-    document.getElementById("voiceStatus").textContent = "考官回答中...";
-    await speakExaminer(data.reply);
+    if (conversationActive) {
+      document.getElementById("voiceStatus").textContent = "考官回答中...";
+      await speakExaminer(data.reply);
+    }
     if (!conversationActive) return;
     showReadyIndicator();
 
     document.getElementById("voiceStatus").textContent = "请回答...";
     startVoiceListening();
   } catch (e) {
-    document.getElementById("voiceStatus").textContent = "出错，点击重试";
+    pendingRequest = null;
+    if (e.name !== "AbortError") document.getElementById("voiceStatus").textContent = "出错，点击重试";
   }
 }
 
 async function endVoiceConversation() {
   conversationActive = false;
+  if (pendingRequest) { pendingRequest.abort(); pendingRequest = null; }
   window.speechSynthesis && speechSynthesis.cancel();
   updateInterruptButtons(false);
   if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
