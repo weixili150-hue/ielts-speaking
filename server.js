@@ -173,9 +173,9 @@ Scores must be realistic (1-9 range, 0.5 increments).
     const tcwLen = (result.transcriptWithChinese && result.transcriptWithChinese.length) || 0;
     console.log("transcriptWithChinese entries:", tcwLen, "| transcript sent:", transcript.length);
 
-    // Fallback: if model omitted summaryChinese, translate summary
-    if (!result.summaryChinese && result.summary) {
-      console.log("summaryChinese missing, translating...");
+    // Always translate summary to Chinese for reliability
+    if (result.summary) {
+      console.log("Translating summary to Chinese...");
       try {
         const tBody = {
           model: MODEL,
@@ -194,10 +194,10 @@ Scores must be realistic (1-9 range, 0.5 increments).
         const tData = await tResp.json();
         if (tResp.ok) {
           result.summaryChinese = tData.choices[0].message.content.trim();
-          console.log("summaryChinese translated:", result.summaryChinese.substring(0, 60));
+          console.log("summaryChinese:", result.summaryChinese.substring(0, 60));
         }
       } catch (te) {
-        console.error("Translation fallback failed:", te.message);
+        console.error("Translation failed:", te.message);
       }
     }
 
