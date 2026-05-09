@@ -176,6 +176,20 @@ html { font-size: 16px; }
   50% { box-shadow: 0 0 16px rgba(255,59,48,0.3); }
 }
 
+
+/* ── Silence countdown ── */
+.silence-countdown {
+  font-size: 0.7rem;
+  color: #b8942e;
+  text-align: center;
+  padding: 4px;
+  animation: pulseCountdown 1s ease-in-out infinite;
+}
+@keyframes pulseCountdown {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
 /* ── Voice conversation view ── */
 .voice-view {
   background: #f2f2f7; display: flex; flex-direction: column; align-items: center;
@@ -1026,6 +1040,8 @@ function toggleVoiceInput() {
 
   recognition.onresult = (e) => {
     if (silenceTimer) clearTimeout(silenceTimer);
+    const cd3 = document.getElementById("silenceCountdown");
+    if (cd3) cd3.remove();
     let allText = "";
     for (let i = 0; i < e.results.length; i++) {
       allText += e.results[i][0].transcript;
@@ -1033,10 +1049,21 @@ function toggleVoiceInput() {
     document.getElementById("chatInput").value = allText.trim();
     silenceTimer = setTimeout(() => {
       if (document.getElementById("chatInput").value.trim()) {
+        const cd = document.getElementById("silenceCountdown");
+        if (cd) cd.remove();
         stopVoiceInput();
         sendMessage();
       }
-    }, 2000);
+    }, 3500);
+    // Show countdown hint
+    let cd = document.getElementById("silenceCountdown");
+    if (!cd) {
+      cd = document.createElement("div");
+      cd.id = "silenceCountdown";
+      cd.className = "silence-countdown";
+      cd.textContent = "静音3.5秒后自动发送...（继续说话可取消）";
+      document.querySelector(".chat-input-area").before(cd);
+    }
   };
 
   recognition.onerror = (e) => {
@@ -1078,6 +1105,8 @@ function toggleVoiceInput() {
 function stopVoiceInput() {
   isMicListening = false;
   if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
+  const cd5 = document.getElementById("silenceCountdown");
+  if (cd5) cd5.remove();
   if (recognition) { try { recognition.stop(); } catch {} }
   document.getElementById("chatRecordingActions").classList.remove("visible");
   const btn = document.getElementById("micBtn");
@@ -1099,12 +1128,27 @@ function retryRecording() {
     recognition.maxAlternatives = 1;
     recognition.onresult = (e) => {
       if (silenceTimer) clearTimeout(silenceTimer);
+      const cd4 = document.getElementById("silenceCountdown");
+      if (cd4) cd4.remove();
       let allText = "";
       for (let i = 0; i < e.results.length; i++) allText += e.results[i][0].transcript;
       document.getElementById("chatInput").value = allText.trim();
       silenceTimer = setTimeout(() => {
-        if (document.getElementById("chatInput").value.trim()) { stopVoiceInput(); sendMessage(); }
-      }, 2000);
+        if (document.getElementById("chatInput").value.trim()) {
+          const cd = document.getElementById("silenceCountdown");
+          if (cd) cd.remove();
+          stopVoiceInput();
+          sendMessage();
+        }
+      }, 3500);
+      let cd2 = document.getElementById("silenceCountdown");
+      if (!cd2) {
+        cd2 = document.createElement("div");
+        cd2.id = "silenceCountdown";
+        cd2.className = "silence-countdown";
+        cd2.textContent = "静音3.5秒后自动发送...（继续说话可取消）";
+        document.querySelector(".chat-input-area").before(cd2);
+      }
     };
     recognition.onerror = (e) => {
       if (e.error === "no-speech") {
@@ -1149,6 +1193,8 @@ let conversationActive = false;
 async function endConversation() {
   conversationActive = false;
   document.getElementById("chatInput").value = "";
+  const cd6 = document.getElementById("silenceCountdown");
+  if (cd6) cd6.remove();
   window.speechSynthesis && speechSynthesis.cancel();
   updateInterruptButtons(false);
   if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
@@ -1195,6 +1241,7 @@ function saveToHistory(transcript, evalData) {
     corrections: evalData.corrections || [],
     scores: evalData.scores || {},
     summary: evalData.summary || "",
+    summaryChinese: evalData.summaryChinese || "",
     naturalExpressions: evalData.naturalExpressions || [],
     recommendations: evalData.recommendations || [],
     nextTopics: evalData.nextTopics || [],
@@ -1206,75 +1253,72 @@ function saveToHistory(transcript, evalData) {
 
 function renderEvaluation(data, transcript) {
   const s = data.scores || {};
+  // Deduplicate transcriptWithChinese by english text
+  const seen = new Set();
+  const tcw = (data.transcriptWithChinese || []).filter(t => {
+    const key = (t.english || t.text || '').trim().toLowerCase();
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  const overallBand = s.fluency ? ((s.fluency + s.vocabulary + s.grammar + s.pronunciation) / 4).toFixed(1) : "?";
+
   document.getElementById("evalContent").innerHTML = `
-    <div class="eval-score-circle">
-      <span class="score">${s.fluency ? ((s.fluency + s.vocabulary + s.grammar + s.pronunciation) / 4).toFixed(1) : "?"}</span>
-      <span class="label">Overall</span>
-    </div>
-    <div class="eval-sub-scores">
-      <div class="eval-sub-score"><div class="val">${s.fluency||"-"}</div>Fluency</div>
-      <div class="eval-sub-score"><div class="val">${s.vocabulary||"-"}</div>Vocabulary</div>
-      <div class="eval-sub-score"><div class="val">${s.grammar||"-"}</div>Grammar</div>
-      <div class="eval-sub-score"><div class="val">${s.pronunciation||"-"}</div>Pronunciation</div>
+    <div class="eval-header">
+      <div class="eval-overall-band">${overallBand}</div>
+      <div class="eval-overall-label">Overall Band Score</div>
     </div>
 
-    ${data.summary ? `<div class="eval-section"><h4>\u{1F4DD} 综合评语</h4><p style="font-size:0.85rem;line-height:1.6">${escapeHtml(data.summary)}</p></div>` : ""}
+    <div class="eval-scores-row">
+      <div class="eval-score-item"><span class="esi-val">${s.fluency||"-"}</span><span class="esi-label">Fluency</span></div>
+      <div class="eval-score-item"><span class="esi-val">${s.vocabulary||"-"}</span><span class="esi-label">Vocabulary</span></div>
+      <div class="eval-score-item"><span class="esi-val">${s.grammar||"-"}</span><span class="esi-label">Grammar</span></div>
+      <div class="eval-score-item"><span class="esi-val">${s.pronunciation||"-"}</span><span class="esi-label">Pronunciation</span></div>
+    </div>
 
-    ${data.recommendations && data.recommendations.length > 0 ? `
-    <div class="eval-section">
-      <h4>\u{1F4AA} 改进建议</h4>
-      ${data.recommendations.map(r => `<div style="font-size:0.8rem;margin-bottom:4px;color:#1c1c1e">• ${escapeHtml(r)}</div>`).join("")}
-    </div>` : ""}
+    ${data.summary ? '<div class="eval-card"><h4>\u{1F4DD} 综合评语</h4><p class="eval-summary-en">' + escapeHtml(data.summary) + '</p>' + (data.summaryChinese ? '<p class="eval-summary-cn">' + escapeHtml(data.summaryChinese) + '</p>' : '') + '</div>' : ""}
 
-    ${data.nextTopics && data.nextTopics.length > 0 ? `
-    <div class="eval-section">
-      <h4>\u{1F4C5} 下次话题推荐</h4>
-      <div style="display:flex;flex-wrap:wrap;gap:6px">${data.nextTopics.map(t => `<span style="font-size:0.75rem;background:#fdf6e3;color:#b8942e;padding:4px 10px;border-radius:8px">${escapeHtml(t)}</span>`).join("")}</div>
-    </div>` : ""}
+    ${data.recommendations && data.recommendations.length > 0 ? '<div class="eval-card"><h4>\u{1F4AA} 改进建议</h4><div class="eval-rec-list">' + data.recommendations.map(r => '<span class="eval-rec-tag">' + escapeHtml(r) + '</span>').join("") + '</div></div>' : ""}
 
-    ${data.transcriptWithChinese && data.transcriptWithChinese.length > 0 ? `
-    <div class="eval-section">
-      <h4>\u{1F4DD} 对话记录与逐句批改</h4>
-      ${(() => {
-        const errCount = data.transcriptWithChinese.filter(t => t.speaker === 'user' && t.correction).length;
-        const exprCount = data.transcriptWithChinese.reduce((sum, t) => sum + (t.naturalExpressions ? t.naturalExpressions.length : 0), 0);
-        const tipCount = data.transcriptWithChinese.filter(t => t.speaker === 'user' && t.suggestion).length;
-        let info = '';
-        if (errCount > 0) info += '\u{1F50D} ' + errCount + '处批改 ';
-        if (exprCount > 0) info += '\u{1F31F} ' + exprCount + '个地道表达 ';
-        if (tipCount > 0) info += '\u{1F4A1} ' + tipCount + '条建议';
-        return info ? '<div style="font-size:0.7rem;color:#8e8e93;margin-bottom:12px">' + info + '</div>' : '';
-      })()}
-      ${data.transcriptWithChinese.map(t => {
-        const isUser = t.speaker === 'user';
-        let html = '<div style="margin-bottom:12px;padding:10px;background:#fff;border-radius:10px;' + (isUser ? 'border-left:3px solid #b8942e' : '') + '">';
-        html += '<div style="font-size:0.7rem;color:' + (t.speaker === 'examiner' ? '#b8942e' : '#8e8e93') + ';margin-bottom:3px">' + (t.speaker === 'examiner' ? '\u{1F468}\u{200D}\u{1F3EB} James' : '\u{1F9D1} You') + '</div>';
-        html += '<div style="font-size:0.85rem;color:#1c1c1e;line-height:1.5">' + escapeHtml(t.english) + '</div>';
-        html += '<div style="font-size:0.75rem;color:#8e8e93;line-height:1.4;margin-top:2px">' + escapeHtml(t.chinese) + '</div>';
-        if (isUser && t.correction) {
-          html += '<div style="margin-top:8px;padding:8px;background:#fdf6e3;border-radius:6px;border:1px solid #e8d5a3">';
-          html += '<div style="font-size:0.7rem;color:#b8942e;margin-bottom:4px">\u{1F50D} 批改</div>';
-          html += '<div style="font-size:0.75rem;color:#ff3b30;text-decoration:line-through;margin-bottom:2px">' + escapeHtml(t.correction.original) + '</div>';
-          html += '<div style="font-size:0.75rem;color:#34c759;margin-bottom:2px">\u{2192} ' + escapeHtml(t.correction.corrected) + '</div>';
-          html += '<div style="font-size:0.75rem;color:#b8942e">\u{1F4AC} ' + escapeHtml(t.correction.natural) + '</div>';
-          if (t.correction.explanation) html += '<div style="font-size:0.7rem;color:#8e8e93;margin-top:2px">' + escapeHtml(t.correction.explanation) + '</div>';
-          html += '</div>';
-        }
-        if (isUser && t.naturalExpressions && t.naturalExpressions.length > 0) {
-          html += '<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px;align-items:center">';
-          html += '<span style="font-size:0.65rem;color:#8e8e93">\u{1F31F} 地道表达:</span>';
-          t.naturalExpressions.forEach(function(e) {
-            html += '<span style="font-size:0.7rem;background:#e8f8ee;color:#34c759;padding:2px 8px;border-radius:4px;cursor:pointer" onclick="speakExaminer(\'' + escapeAttr(e) + '\', true)" title="\u{1F50A} Click to hear">' + escapeHtml(e) + '</span>';
-          });
-          html += '</div>';
-        }
-        if (isUser && t.suggestion) {
-          html += '<div style="margin-top:4px;font-size:0.7rem;color:#8e8e93">\u{1F4A1} ' + escapeHtml(t.suggestion) + '</div>';
-        }
+    ${data.nextTopics && data.nextTopics.length > 0 ? '<div class="eval-card"><h4>\u{1F4C5} 下次话题推荐</h4><div class="eval-topic-tags">' + data.nextTopics.map(t => '<span class="eval-topic-tag">' + escapeHtml(t) + '</span>').join("") + '</div></div>' : ""}
+
+    ${tcw.length > 0 ? '<div class="eval-card"><h4>\u{1F4DD} 对话记录与逐句批改</h4>' + (() => { 
+      const errCount = tcw.filter(t => t.speaker === 'user' && t.correction).length;
+      const exprCount = tcw.reduce((sum, t) => sum + (t.naturalExpressions ? t.naturalExpressions.length : 0), 0);
+      const tipCount = tcw.filter(t => t.speaker === 'user' && t.suggestion).length;
+      let info = '';
+      if (errCount > 0) info += '\u{1F50D} ' + errCount + '处批改 ';
+      if (exprCount > 0) info += '\u2B50 ' + exprCount + '个地道表达 ';
+      if (tipCount > 0) info += '\u{1F4A1} ' + tipCount + '条建议';
+      return info ? '<div style="font-size:0.72rem;color:#8e8e93;margin-bottom:14px">' + info + '</div>' : '';
+    })() + tcw.map(t => {
+      const isUser = t.speaker === 'user';
+      let html = '<div style="margin-bottom:14px;padding:12px;background:#fff;border-radius:10px;border:0.5px solid #e9e9eb;' + (isUser ? 'border-left:3px solid #b8942e' : '') + '">';
+      html += '<div style="font-size:0.7rem;color:' + (t.speaker === 'examiner' ? '#b8942e' : '#8e8e93') + ';margin-bottom:4px;font-weight:600">' + (t.speaker === 'examiner' ? '\u{1F468}\u200D\u{1F3EB} James' : '\u{1F9D1} You') + '</div>';
+      html += '<div style="font-size:0.85rem;color:#1c1c1e;line-height:1.5">' + escapeHtml(t.english || t.text || '') + '</div>';
+      html += '<div style="font-size:0.73rem;color:#8e8e93;line-height:1.4;margin-top:4px">' + escapeHtml(t.chinese || '') + '</div>';
+      if (isUser && t.correction) {
+        html += '<div style="margin-top:8px;padding:8px 10px;background:#fdf6e3;border-radius:6px">';
+        html += '<div style="font-size:0.72rem;color:#ff3b30;text-decoration:line-through;margin-bottom:2px">' + escapeHtml(t.correction.original) + '</div>';
+        html += '<div style="font-size:0.75rem;color:#34c759;margin-bottom:2px">\u2192 ' + escapeHtml(t.correction.corrected) + '</div>';
+        if (t.correction.natural) html += '<div style="font-size:0.73rem;color:#b8942e">\u{1F4AC} ' + escapeHtml(t.correction.natural) + '</div>';
+        if (t.correction.explanation) html += '<div style="font-size:0.68rem;color:#8e8e93;margin-top:2px">' + escapeHtml(t.correction.explanation) + '</div>';
         html += '</div>';
-        return html;
-      }).join("")}
-    </div>` : (transcript && transcript.length > 0 ? '<div class="eval-section"><h4>\u{1F4DD} 对话记录</h4>' + transcriptFallbackHtml(transcript) + '</div>' : "")}
+      }
+      if (isUser && t.naturalExpressions && t.naturalExpressions.length > 0) {
+        html += '<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px;align-items:center"><span style="font-size:0.65rem;color:#8e8e93">\u2B50 地道:</span>';
+        t.naturalExpressions.forEach(function(e) {
+          html += '<span style="font-size:0.7rem;background:#e8f8ee;color:#34c759;padding:2px 8px;border-radius:4px;cursor:pointer" onclick="speakExaminer(\'' + escapeAttr(e) + '\', true)">' + escapeHtml(e) + '</span>';
+        });
+        html += '</div>';
+      }
+      if (isUser && t.suggestion) {
+        html += '<div style="margin-top:4px;font-size:0.7rem;color:#8e8e93">\u{1F4A1} ' + escapeHtml(t.suggestion) + '</div>';
+      }
+      html += '</div>';
+      return html;
+    }).join("") + '</div>' : (transcript && transcript.length > 0 ? '<div class="eval-card"><h4>\u{1F4DD} 对话记录</h4>' + transcriptFallbackHtml(transcript) + '</div>' : "")}
 
     <div class="eval-actions">
       <button class="btn-back" onclick="goHome()">返回首页</button>
@@ -1336,7 +1380,7 @@ function startVoiceListening() {
       voiceTranscript.push({ speaker: "user", text });
       document.getElementById("voiceStatus").textContent = "考官思考中...";
       await processVoiceTurn(text);
-    }, 2000);
+    }, 3500);
   };
 
   rec.onerror = (e) => {
@@ -1452,62 +1496,66 @@ function viewHistoryDetail(id) {
   const s = item.scores || {};
   const avgScore = s.fluency ? ((s.fluency + s.vocabulary + s.grammar + s.pronunciation) / 4).toFixed(1) : "?";
 
+  // Deduplicate
+  const seen = new Set();
+  const tcw = (item.transcriptWithChinese || []).filter(t => {
+    const key = (t.english || t.text || '').trim().toLowerCase();
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
   document.getElementById("detailContent").innerHTML = `
     <button class="back-btn" onclick="switchTab('history')">← 返回记录</button>
-    <div class="eval-score-circle">
-      <span class="score">${avgScore}</span><span class="label">Overall</span>
+    <div class="eval-header">
+      <div class="eval-overall-band">${avgScore}</div>
+      <div class="eval-overall-label">Overall Band Score</div>
     </div>
-    <div class="eval-sub-scores">
-      <div class="eval-sub-score"><div class="val">${s.fluency||"-"}</div>Fluency</div>
-      <div class="eval-sub-score"><div class="val">${s.vocabulary||"-"}</div>Vocabulary</div>
-      <div class="eval-sub-score"><div class="val">${s.grammar||"-"}</div>Grammar</div>
-      <div class="eval-sub-score"><div class="val">${s.pronunciation||"-"}</div>Pronunciation</div>
+    <div class="eval-scores-row">
+      <div class="eval-score-item"><span class="esi-val">${s.fluency||"-"}</span><span class="esi-label">Fluency</span></div>
+      <div class="eval-score-item"><span class="esi-val">${s.vocabulary||"-"}</span><span class="esi-label">Vocabulary</span></div>
+      <div class="eval-score-item"><span class="esi-val">${s.grammar||"-"}</span><span class="esi-label">Grammar</span></div>
+      <div class="eval-score-item"><span class="esi-val">${s.pronunciation||"-"}</span><span class="esi-label">Pronunciation</span></div>
     </div>
 
-    ${item.summary ? `<div class="eval-section"><h4>\u{1F4DD} 综合评语</h4><p style="font-size:0.85rem;line-height:1.6">${escapeHtml(item.summary)}</p></div>` : ""}
+    ${item.summary ? '<div class="eval-card"><h4>\u{1F4DD} 综合评语</h4><p class="eval-summary-en">' + escapeHtml(item.summary) + '</p>' + (item.summaryChinese ? '<p class="eval-summary-cn">' + escapeHtml(item.summaryChinese) + '</p>' : '') + '</div>' : ""}
 
-    ${item.transcriptWithChinese && item.transcriptWithChinese.length > 0 ? `
-    <div class="eval-section"><h4>\u{1F4DD} 对话记录与逐句批改</h4>
-      ${(() => {
-        const errCount = item.transcriptWithChinese.filter(t => t.speaker === 'user' && t.correction).length;
-        const exprCount = item.transcriptWithChinese.reduce((sum, t) => sum + (t.naturalExpressions ? t.naturalExpressions.length : 0), 0);
-        const tipCount = item.transcriptWithChinese.filter(t => t.speaker === 'user' && t.suggestion).length;
-        let info = '';
-        if (errCount > 0) info += '\u{1F50D} ' + errCount + '处批改 ';
-        if (exprCount > 0) info += '\u{1F31F} ' + exprCount + '个地道表达 ';
-        if (tipCount > 0) info += '\u{1F4A1} ' + tipCount + '条建议';
-        return info ? '<div style="font-size:0.7rem;color:#8e8e93;margin-bottom:12px">' + info + '</div>' : '';
-      })()}
-      ${item.transcriptWithChinese.map(t => {
-        const isUser = t.speaker === 'user';
-        let html = '<div style="margin-bottom:12px;padding:10px;background:#fff;border-radius:10px;' + (isUser ? 'border-left:3px solid #b8942e' : '') + '">';
-        html += '<div style="font-size:0.7rem;color:' + (t.speaker === 'examiner' ? '#b8942e' : '#8e8e93') + ';margin-bottom:3px">' + (t.speaker === 'examiner' ? '\u{1F468}\u{200D}\u{1F3EB} James' : '\u{1F9D1} You') + '</div>';
-        html += '<div style="font-size:0.85rem;color:#1c1c1e;line-height:1.5">' + escapeHtml(t.english) + '</div>';
-        html += '<div style="font-size:0.75rem;color:#8e8e93;line-height:1.4;margin-top:2px">' + escapeHtml(t.chinese) + '</div>';
-        if (isUser && t.correction) {
-          html += '<div style="margin-top:8px;padding:8px;background:#fdf6e3;border-radius:6px;border:1px solid #e8d5a3">';
-          html += '<div style="font-size:0.7rem;color:#b8942e;margin-bottom:4px">\u{1F50D} 批改</div>';
-          html += '<div style="font-size:0.75rem;color:#ff3b30;text-decoration:line-through;margin-bottom:2px">' + escapeHtml(t.correction.original) + '</div>';
-          html += '<div style="font-size:0.75rem;color:#34c759;margin-bottom:2px">\u{2192} ' + escapeHtml(t.correction.corrected) + '</div>';
-          html += '<div style="font-size:0.75rem;color:#b8942e">\u{1F4AC} ' + escapeHtml(t.correction.natural) + '</div>';
-          if (t.correction.explanation) html += '<div style="font-size:0.7rem;color:#8e8e93;margin-top:2px">' + escapeHtml(t.correction.explanation) + '</div>';
-          html += '</div>';
-        }
-        if (isUser && t.naturalExpressions && t.naturalExpressions.length > 0) {
-          html += '<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px;align-items:center">';
-          html += '<span style="font-size:0.65rem;color:#8e8e93">\u{1F31F} 地道表达:</span>';
-          t.naturalExpressions.forEach(function(e) {
-            html += '<span style="font-size:0.7rem;background:#e8f8ee;color:#34c759;padding:2px 8px;border-radius:4px;cursor:pointer" onclick="speakExaminer(\'' + escapeAttr(e) + '\', true)" title="\u{1F50A} Click to hear">' + escapeHtml(e) + '</span>';
-          });
-          html += '</div>';
-        }
-        if (isUser && t.suggestion) {
-          html += '<div style="margin-top:4px;font-size:0.7rem;color:#8e8e93">\u{1F4A1} ' + escapeHtml(t.suggestion) + '</div>';
-        }
+    ${tcw.length > 0 ? '<div class="eval-card"><h4>\u{1F4DD} 对话记录与逐句批改</h4>' + (() => {
+      const errCount = tcw.filter(t => t.speaker === 'user' && t.correction).length;
+      const exprCount = tcw.reduce((sum, t) => sum + (t.naturalExpressions ? t.naturalExpressions.length : 0), 0);
+      const tipCount = tcw.filter(t => t.speaker === 'user' && t.suggestion).length;
+      let info = '';
+      if (errCount > 0) info += '\u{1F50D} ' + errCount + '处批改 ';
+      if (exprCount > 0) info += '\u2B50 ' + exprCount + '个地道表达 ';
+      if (tipCount > 0) info += '\u{1F4A1} ' + tipCount + '条建议';
+      return info ? '<div style="font-size:0.72rem;color:#8e8e93;margin-bottom:14px">' + info + '</div>' : '';
+    })() + tcw.map(t => {
+      const isUser = t.speaker === 'user';
+      let html = '<div style="margin-bottom:14px;padding:12px;background:#fff;border-radius:10px;border:0.5px solid #e9e9eb;' + (isUser ? 'border-left:3px solid #b8942e' : '') + '">';
+      html += '<div style="font-size:0.7rem;color:' + (t.speaker === 'examiner' ? '#b8942e' : '#8e8e93') + ';margin-bottom:4px;font-weight:600">' + (t.speaker === 'examiner' ? '\u{1F468}\u{200D}\u{1F3EB} James' : '\u{1F9D1} You') + '</div>';
+      html += '<div style="font-size:0.85rem;color:#1c1c1e;line-height:1.5">' + escapeHtml(t.english || t.text || '') + '</div>';
+      html += '<div style="font-size:0.73rem;color:#8e8e93;line-height:1.4;margin-top:4px">' + escapeHtml(t.chinese || '') + '</div>';
+      if (isUser && t.correction) {
+        html += '<div style="margin-top:8px;padding:8px 10px;background:#fdf6e3;border-radius:6px">';
+        html += '<div style="font-size:0.72rem;color:#ff3b30;text-decoration:line-through;margin-bottom:2px">' + escapeHtml(t.correction.original) + '</div>';
+        html += '<div style="font-size:0.75rem;color:#34c759;margin-bottom:2px">\u2192 ' + escapeHtml(t.correction.corrected) + '</div>';
+        if (t.correction.natural) html += '<div style="font-size:0.73rem;color:#b8942e">\u{1F4AC} ' + escapeHtml(t.correction.natural) + '</div>';
+        if (t.correction.explanation) html += '<div style="font-size:0.68rem;color:#8e8e93;margin-top:2px">' + escapeHtml(t.correction.explanation) + '</div>';
         html += '</div>';
-        return html;
-      }).join("")}
-    </div>` : ((item.transcript || []).length > 0 ? '<div class="eval-section"><h4>\u{1F4DD} 对话记录</h4>' + transcriptFallbackHtml(item.transcript) + '</div>' : "")}`;
+      }
+      if (isUser && t.naturalExpressions && t.naturalExpressions.length > 0) {
+        html += '<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px;align-items:center"><span style="font-size:0.65rem;color:#8e8e93">\u2B50 地道:</span>';
+        t.naturalExpressions.forEach(function(e) {
+          html += '<span style="font-size:0.7rem;background:#e8f8ee;color:#34c759;padding:2px 8px;border-radius:4px;cursor:pointer" onclick="speakExaminer(\'' + escapeAttr(e) + '\', true)">' + escapeHtml(e) + '</span>';
+        });
+        html += '</div>';
+      }
+      if (isUser && t.suggestion) {
+        html += '<div style="margin-top:4px;font-size:0.7rem;color:#8e8e93">\u{1F4A1} ' + escapeHtml(t.suggestion) + '</div>';
+      }
+      html += '</div>';
+      return html;
+    }).join("") + '</div>' : ((item.transcript || []).length > 0 ? '<div class="eval-card"><h4>\u{1F4DD} 对话记录</h4>' + transcriptFallbackHtml(item.transcript) + '</div>' : "")}`;
 }
 
 // ── Helpers ──
