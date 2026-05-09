@@ -87,6 +87,33 @@ Start with Part 1. Announce each part transition. At the end of Part 3, say "Tha
   }
 });
 
+// ── Translate API (frontend fallback) ──
+app.post("/api/translate", async (req, res) => {
+  const { text } = req.body || {};
+  if (!text || !text.trim()) return res.status(400).json({ error: "empty text" });
+  try {
+    const resp = await fetch(`${API_BASE}/chat/completions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${API_KEY}` },
+      body: JSON.stringify({
+        model: MODEL,
+        max_tokens: 500,
+        temperature: 0.3,
+        messages: [
+          { role: "system", content: "Translate the following English to natural Chinese. Return ONLY the Chinese, nothing else." },
+          { role: "user", content: text.trim() }
+        ]
+      })
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(`${resp.status}`);
+    res.json({ chinese: data.choices[0].message.content.trim() });
+  } catch (e) {
+    console.error("Translate error:", e.message);
+    res.status(500).json({ error: "Translation failed" });
+  }
+});
+
 // ── Evaluate API ──
 app.post("/api/evaluate", async (req, res) => {
   const { mode, transcript } = req.body || {};

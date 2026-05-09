@@ -1221,6 +1221,19 @@ async function runEvaluation() {
     const data = await resp.json();
     if (!resp.ok) { showToast(data.error, "error"); return; }
 
+    // Frontend safety net: if summaryChinese is missing, translate it
+    if (!data.summaryChinese && data.summary) {
+      try {
+        const tResp = await fetch("/api/translate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: data.summary })
+        });
+        const tData = await tResp.json();
+        if (tResp.ok && tData.chinese) data.summaryChinese = tData.chinese;
+      } catch {}
+    }
+
     // Save to history
     saveToHistory(transcript, data);
     renderEvaluation(data, transcript);
