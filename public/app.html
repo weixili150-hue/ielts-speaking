@@ -1206,6 +1206,7 @@ function endCurrentTurn() {
 // ── End conversation & Evaluate ──
 let conversationActive = false;
 let pendingRequest = null;
+let lastEvalData = null;
 
 async function endConversation() {
   conversationActive = false;
@@ -1283,6 +1284,7 @@ function saveToHistory(transcript, evalData) {
 }
 
 function renderEvaluation(data, transcript) {
+  lastEvalData = { data, transcript };
   const s = data.scores || {};
   // Deduplicate transcriptWithChinese by english text
   const seen = new Set();
@@ -1330,28 +1332,38 @@ function renderEvaluation(data, transcript) {
       html += '<div style="font-size:0.85rem;color:#1c1c1e;line-height:1.5">' + escapeHtml(t.english || t.text || '') + '</div>';
       html += '<div style="font-size:0.73rem;color:#8e8e93;line-height:1.4;margin-top:4px">' + escapeHtml(t.chinese || '') + '</div>';
       if (isUser && t.correction) {
-        html += '<div style="margin-top:8px;padding:8px 10px;background:#fdf6e3;border-radius:6px">';
-        html += '<div style="font-size:0.72rem;color:#ff3b30;text-decoration:line-through;margin-bottom:2px">' + escapeHtml(t.correction.original) + '</div>';
-        html += '<div style="font-size:0.75rem;color:#34c759;margin-bottom:2px">\u2192 ' + escapeHtml(t.correction.corrected) + '</div>';
-        if (t.correction.natural) html += '<div style="font-size:0.73rem;color:#b8942e">\u{1F4AC} ' + escapeHtml(t.correction.natural) + '</div>';
-        if (t.correction.explanation) html += '<div style="font-size:0.68rem;color:#8e8e93;margin-top:2px">' + escapeHtml(t.correction.explanation) + '</div>';
+        html += '<div style="margin-top:8px;padding:10px 12px;background:#fdf6e3;border-radius:8px">';
+        html += '<div style="font-size:0.63rem;color:#ff3b30;margin-bottom:2px;font-weight:600;letter-spacing:0.5px">\u2711 原文 ORIGINAL</div>';
+        html += '<div style="font-size:0.72rem;color:#ff3b30;text-decoration:line-through;margin-bottom:6px">' + escapeHtml(t.correction.original) + '</div>';
+        html += '<div style="font-size:0.63rem;color:#34c759;margin-bottom:2px;font-weight:600;letter-spacing:0.5px">\u2713 修改 CORRECTED</div>';
+        html += '<div style="font-size:0.75rem;color:#34c759;margin-bottom:6px">' + escapeHtml(t.correction.corrected) + '</div>';
+        if (t.correction.natural) {
+          html += '<div style="font-size:0.63rem;color:#b8942e;margin-bottom:2px;font-weight:600;letter-spacing:0.5px">\u{1F4AC} 地道表达 NATURAL</div>';
+          html += '<div style="font-size:0.73rem;color:#b8942e">' + escapeHtml(t.correction.natural) + '</div>';
+        }
+        if (t.correction.explanation) {
+          html += '<div style="font-size:0.63rem;color:#8e8e93;margin-top:4px;margin-bottom:2px;font-weight:600;letter-spacing:0.5px">\u{1F4A1} 解释 NOTE</div>';
+          html += '<div style="font-size:0.68rem;color:#8e8e93">' + escapeHtml(t.correction.explanation) + '</div>';
+        }
         html += '</div>';
       }
       if (isUser && t.naturalExpressions && t.naturalExpressions.length > 0) {
-        html += '<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px;align-items:center"><span style="font-size:0.65rem;color:#8e8e93">\u2B50 地道:</span>';
+        html += '<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px;align-items:center"><span style="font-size:0.63rem;color:#8e8e93;font-weight:600">\u2B50 其他地道表达:</span>';
         t.naturalExpressions.forEach(function(e) {
           html += '<span style="font-size:0.7rem;background:#e8f8ee;color:#34c759;padding:2px 8px;border-radius:4px;cursor:pointer" onclick="speakExaminer(\'' + escapeAttr(e) + '\', true)">' + escapeHtml(e) + '</span>';
         });
         html += '</div>';
       }
       if (isUser && t.suggestion) {
-        html += '<div style="margin-top:4px;font-size:0.7rem;color:#8e8e93">\u{1F4A1} ' + escapeHtml(t.suggestion) + '</div>';
+        html += '<div style="margin-top:4px;font-size:0.63rem;color:#8e8e93;font-weight:600">\u{1F4A1} 建议 SUGGESTION</div>';
+        html += '<div style="font-size:0.72rem;color:#8e8e93">' + escapeHtml(t.suggestion) + '</div>';
       }
       html += '</div>';
       return html;
     }).join("") + '</div>' : (transcript && transcript.length > 0 ? '<div class="eval-card"><h4>\u{1F4DD} 对话记录</h4>' + transcriptFallbackHtml(transcript) + '</div>' : "")}
 
     <div class="eval-actions">
+      <button class="btn-back" onclick="exportWord()" style="background:#fff;color:#b8942e">📄 导出 Word</button>
       <button class="btn-back" onclick="goHome()">返回首页</button>
     </div>`;
 }
@@ -1497,6 +1509,41 @@ function goHome() {
   renderModeCards();
 }
 
+async function exportWord() {
+  if (!lastEvalData) { showToast("No evaluation data", "error"); return; }
+  const { data, transcript } = lastEvalData;
+  try {
+    const resp = await fetch("/api/export-eval", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        mode: currentMode,
+        interaction: currentInteraction,
+        topic: currentTopic,
+        scores: data.scores,
+        summary: data.summary,
+        summaryChinese: data.summaryChinese,
+        recommendations: data.recommendations,
+        transcriptWithChinese: data.transcriptWithChinese,
+        naturalExpressions: data.naturalExpressions
+      })
+    });
+    if (!resp.ok) throw new Error("Export failed");
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "ielts-evaluation.docx";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast("Word 下载成功", "success");
+  } catch (e) {
+    showToast("导出失败，请重试", "error");
+  }
+}
+
 // ── History ──
 function loadHistory() {
   try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; } catch { return []; }
@@ -1543,6 +1590,22 @@ function viewHistoryDetail(id) {
   const item = items.find(i => i.id === id);
   if (!item) return;
 
+  // Store for export
+  lastEvalData = {
+    data: {
+      scores: item.scores,
+      summary: item.summary,
+      summaryChinese: item.summaryChinese,
+      recommendations: item.recommendations,
+      transcriptWithChinese: item.transcriptWithChinese,
+      naturalExpressions: item.naturalExpressions
+    },
+    transcript: item.transcript
+  };
+  currentMode = item.mode;
+  currentInteraction = item.interaction;
+  currentTopic = item.topic;
+
   showView("detail");
   const s = item.scores || {};
   const avgScore = s.fluency ? ((s.fluency + s.vocabulary + s.grammar + s.pronunciation) / 4).toFixed(1) : "?";
@@ -1558,6 +1621,7 @@ function viewHistoryDetail(id) {
 
   document.getElementById("detailContent").innerHTML = `
     <button class="back-btn" onclick="switchTab('history')">← 返回记录</button>
+    <button class="back-btn" onclick="exportWord()" style="float:right;color:#b8942e">📄 导出 Word</button>
     <div class="eval-header">
       <div class="eval-overall-band">${avgScore}</div>
       <div class="eval-overall-label">Overall Band Score</div>
@@ -1587,22 +1651,31 @@ function viewHistoryDetail(id) {
       html += '<div style="font-size:0.85rem;color:#1c1c1e;line-height:1.5">' + escapeHtml(t.english || t.text || '') + '</div>';
       html += '<div style="font-size:0.73rem;color:#8e8e93;line-height:1.4;margin-top:4px">' + escapeHtml(t.chinese || '') + '</div>';
       if (isUser && t.correction) {
-        html += '<div style="margin-top:8px;padding:8px 10px;background:#fdf6e3;border-radius:6px">';
-        html += '<div style="font-size:0.72rem;color:#ff3b30;text-decoration:line-through;margin-bottom:2px">' + escapeHtml(t.correction.original) + '</div>';
-        html += '<div style="font-size:0.75rem;color:#34c759;margin-bottom:2px">\u2192 ' + escapeHtml(t.correction.corrected) + '</div>';
-        if (t.correction.natural) html += '<div style="font-size:0.73rem;color:#b8942e">\u{1F4AC} ' + escapeHtml(t.correction.natural) + '</div>';
-        if (t.correction.explanation) html += '<div style="font-size:0.68rem;color:#8e8e93;margin-top:2px">' + escapeHtml(t.correction.explanation) + '</div>';
+        html += '<div style="margin-top:8px;padding:10px 12px;background:#fdf6e3;border-radius:8px">';
+        html += '<div style="font-size:0.63rem;color:#ff3b30;margin-bottom:2px;font-weight:600;letter-spacing:0.5px">\u2711 原文 ORIGINAL</div>';
+        html += '<div style="font-size:0.72rem;color:#ff3b30;text-decoration:line-through;margin-bottom:6px">' + escapeHtml(t.correction.original) + '</div>';
+        html += '<div style="font-size:0.63rem;color:#34c759;margin-bottom:2px;font-weight:600;letter-spacing:0.5px">\u2713 修改 CORRECTED</div>';
+        html += '<div style="font-size:0.75rem;color:#34c759;margin-bottom:6px">' + escapeHtml(t.correction.corrected) + '</div>';
+        if (t.correction.natural) {
+          html += '<div style="font-size:0.63rem;color:#b8942e;margin-bottom:2px;font-weight:600;letter-spacing:0.5px">\u{1F4AC} 地道表达 NATURAL</div>';
+          html += '<div style="font-size:0.73rem;color:#b8942e">' + escapeHtml(t.correction.natural) + '</div>';
+        }
+        if (t.correction.explanation) {
+          html += '<div style="font-size:0.63rem;color:#8e8e93;margin-top:4px;margin-bottom:2px;font-weight:600;letter-spacing:0.5px">\u{1F4A1} 解释 NOTE</div>';
+          html += '<div style="font-size:0.68rem;color:#8e8e93">' + escapeHtml(t.correction.explanation) + '</div>';
+        }
         html += '</div>';
       }
       if (isUser && t.naturalExpressions && t.naturalExpressions.length > 0) {
-        html += '<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px;align-items:center"><span style="font-size:0.65rem;color:#8e8e93">\u2B50 地道:</span>';
+        html += '<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px;align-items:center"><span style="font-size:0.63rem;color:#8e8e93;font-weight:600">\u2B50 其他地道表达:</span>';
         t.naturalExpressions.forEach(function(e) {
           html += '<span style="font-size:0.7rem;background:#e8f8ee;color:#34c759;padding:2px 8px;border-radius:4px;cursor:pointer" onclick="speakExaminer(\'' + escapeAttr(e) + '\', true)">' + escapeHtml(e) + '</span>';
         });
         html += '</div>';
       }
       if (isUser && t.suggestion) {
-        html += '<div style="margin-top:4px;font-size:0.7rem;color:#8e8e93">\u{1F4A1} ' + escapeHtml(t.suggestion) + '</div>';
+        html += '<div style="margin-top:4px;font-size:0.63rem;color:#8e8e93;font-weight:600">\u{1F4A1} 建议 SUGGESTION</div>';
+        html += '<div style="font-size:0.72rem;color:#8e8e93">' + escapeHtml(t.suggestion) + '</div>';
       }
       html += '</div>';
       return html;

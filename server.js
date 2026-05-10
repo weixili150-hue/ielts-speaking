@@ -1,5 +1,6 @@
 const express = require("express");
 const path = require("path");
+const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, HeadingLevel, AlignmentType, BorderStyle, WidthType } = require("docx");
 require("dotenv").config();
 
 const app = express();
@@ -251,6 +252,108 @@ Scores must be realistic (1-9 range, 0.5 increments).
     console.error("Raw content (first 300):", (content || "").substring(0, 300));
     res.status(500).json({ error: "Evaluation failed. Please try again." });
   }
+});
+
+// ── Export Word API ──
+app.post("/api/export-eval", async (req, res) => {
+  const { mode, interaction, topic, scores, summary, summaryChinese, recommendations, transcriptWithChinese, naturalExpressions } = req.body || {};
+  const modeLabel = { "free-talk": "Free Talk", "ielts-topics": "IELTS Topic", "mock-test": "Mock Test" }[mode] || mode;
+  const interactionLabel = interaction === "voice" ? "全程语音" : "文字对话";
+  const dateStr = new Date().toLocaleString("zh-CN");
+  const avgScore = scores && scores.fluency ? ((scores.fluency + scores.vocabulary + scores.grammar + scores.pronunciation) / 4).toFixed(1) : "?";
+
+  const children = [];
+
+  // ── Title ──
+  children.push(new Paragraph({ children: [new TextRun({ text: "IELTS Speaking Evaluation", bold: true, size: 40, font: "Calibri" })], spacing: { after: 100 } }));
+  children.push(new Paragraph({ children: [new TextRun({ text: `${modeLabel} · ${interactionLabel} · ${topic || "General"}`, size: 22, color: "666666", font: "Calibri" })], spacing: { after: 100 } }));
+  children.push(new Paragraph({ children: [new TextRun({ text: dateStr, size: 20, color: "999999", font: "Calibri" })], spacing: { after: 300 } }));
+
+  // ── Scores ──
+  children.push(new Paragraph({ children: [new TextRun({ text: "Scores", bold: true, size: 28, font: "Calibri" })], spacing: { after: 100 } }));
+  children.push(new Paragraph({ children: [new TextRun({ text: `Overall Band Score: ${avgScore}`, bold: true, size: 24, font: "Calibri" })], spacing: { after: 100 } }));
+
+  if (scores) {
+    const subLabels = [
+      { key: "fluency", label: "Fluency 流利度" },
+      { key: "vocabulary", label: "Vocabulary 词汇量" },
+      { key: "grammar", label: "Grammar 语法" },
+      { key: "pronunciation", label: "Pronunciation 发音" }
+    ];
+    const subRuns = subLabels.map(sl => new TextRun({ text: `${sl.label}: ${scores[sl.key] || "-"}    `, size: 22, font: "Calibri" }));
+    children.push(new Paragraph({ children: subRuns, spacing: { after: 200 } }));
+  }
+
+  // ── Summary (English) ──
+  if (summary) {
+    children.push(new Paragraph({ children: [new TextRun({ text: "综合评语", bold: true, size: 28, font: "Calibri" })], spacing: { after: 100 } }));
+    children.push(new Paragraph({ children: [new TextRun({ text: summary, size: 22, font: "Calibri" })], spacing: { after: 100 } }));
+  }
+  if (summaryChinese) {
+    children.push(new Paragraph({ children: [new TextRun({ text: "中文总结", bold: true, size: 24, font: "Calibri" })], spacing: { after: 100 } }));
+    children.push(new Paragraph({ children: [new TextRun({ text: summaryChinese, size: 22, font: "Calibri" })], spacing: { after: 200 } }));
+  }
+
+  // ── Recommendations ──
+  if (recommendations && recommendations.length > 0) {
+    children.push(new Paragraph({ children: [new TextRun({ text: "改进建议", bold: true, size: 28, font: "Calibri" })], spacing: { after: 100 } }));
+    recommendations.forEach(r => {
+      children.push(new Paragraph({ children: [new TextRun({ text: `• ${r}`, size: 22, font: "Calibri" })], spacing: { after: 60 } }));
+    });
+    children.push(new Paragraph({ spacing: { after: 200 }, children: [] }));
+  }
+
+  // ── Transcript with corrections ──
+  if (transcriptWithChinese && transcriptWithChinese.length > 0) {
+    children.push(new Paragraph({ children: [new TextRun({ text: "对话记录与逐句批改", bold: true, size: 28, font: "Calibri" })], border: { bottom: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" } }, spacing: { after: 200 } }));
+
+    transcriptWithChinese.forEach((t, i) => {
+      const isUser = t.speaker === "user";
+      const speaker = isUser ? "You 你" : "James 考官";
+      const english = t.english || t.text || "";
+      const chinese = t.chinese || "";
+
+      children.push(new Paragraph({ children: [new TextRun({ text: speaker, bold: true, size: 22, font: "Calibri", color: isUser ? "007AFF" : "B8942E" })], spacing: { after: 40 } }));
+      children.push(new Paragraph({ children: [new TextRun({ text: english, size: 22, font: "Calibri" })], spacing: { after: 20 } }));
+      if (chinese) {
+        children.push(new Paragraph({ children: [new TextRun({ text: chinese, size: 20, font: "Calibri", color: "888888" })], spacing: { after: 60 } }));
+      }
+
+      if (isUser && t.correction) {
+        const c = t.correction;
+        children.push(new Paragraph({ children: [new TextRun({ text: "原文:", bold: true, size: 20, font: "Calibri", color: "FF3B30" }), new TextRun({ text: c.original || "", size: 20, font: "Calibri", color: "FF3B30", strike: true })], spacing: { after: 20 } }));
+        if (c.corrected) {
+          children.push(new Paragraph({ children: [new TextRun({ text: "修改:", bold: true, size: 20, font: "Calibri", color: "34C759" }), new TextRun({ text: c.corrected, size: 20, font: "Calibri", color: "34C759" })], spacing: { after: 20 } }));
+        }
+        if (c.natural) {
+          children.push(new Paragraph({ children: [new TextRun({ text: "地道表达:", bold: true, size: 20, font: "Calibri", color: "B8942E" }), new TextRun({ text: c.natural, size: 20, font: "Calibri", color: "B8942E" })], spacing: { after: 20 } }));
+        }
+        if (c.explanation) {
+          children.push(new Paragraph({ children: [new TextRun({ text: "解释:", bold: true, size: 20, font: "Calibri", color: "888888" }), new TextRun({ text: c.explanation, size: 20, font: "Calibri", color: "888888" })], spacing: { after: 40 } }));
+        }
+      }
+
+      if (isUser && t.naturalExpressions && t.naturalExpressions.length > 0) {
+        children.push(new Paragraph({ children: [new TextRun({ text: `其他地道说法: ${t.naturalExpressions.join(" / ")}`, size: 20, font: "Calibri", color: "34C759" })], spacing: { after: 40 } }));
+      }
+
+      if (isUser && t.suggestion) {
+        children.push(new Paragraph({ children: [new TextRun({ text: `建议: ${t.suggestion}`, size: 20, font: "Calibri", color: "888888" })], spacing: { after: 80 } }));
+      }
+
+      children.push(new Paragraph({ spacing: { after: 120 }, children: [] }));
+    });
+  }
+
+  const doc = new Document({
+    styles: { paragraphStyles: [{ id: "Normal", name: "Normal", run: { size: 22, font: "Calibri" } }] },
+    sections: [{ children }]
+  });
+
+  const buffer = await Packer.toBuffer(doc);
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+  res.setHeader("Content-Disposition", "attachment; filename=ielts-evaluation.docx");
+  res.send(buffer);
 });
 
 app.listen(PORT, "0.0.0.0", () => {
