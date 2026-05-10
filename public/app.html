@@ -228,36 +228,30 @@ html { font-size: 16px; }
 
 /* ── Evaluate view ── */
 .eval-view { padding: 24px 20px; }
-.eval-score-circle {
-  width: 104px; height: 104px; border-radius: 50%;
-  background: #fff;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.06), 0 0 0 3px #b8942e;
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  margin: 0 auto 20px;
-}
-.eval-score-circle .score { font-size: 2.2rem; font-weight: 700; color: #b8942e; }
-.eval-score-circle .label { font-size: 0.65rem; color: #8e8e93; }
 
-.eval-sub-scores { display: flex; justify-content: center; gap: 14px; margin-bottom: 24px; flex-wrap: wrap; }
-.eval-sub-score { text-align: center; font-size: 0.7rem; color: #8e8e93; }
-.eval-sub-score .val { font-size: 1.05rem; font-weight: 600; color: #1c1c1e; }
+.eval-header { text-align: center; margin-bottom: 24px; }
+.eval-overall-band { font-size: 3rem; font-weight: 700; color: #b8942e; line-height: 1; }
+.eval-overall-label { font-size: 0.75rem; color: #8e8e93; margin-top: 4px; }
 
-.eval-section {
+.eval-scores-row { display: flex; justify-content: center; gap: 14px; margin-bottom: 24px; flex-wrap: wrap; }
+.eval-score-item { text-align: center; }
+.esi-val { font-size: 1.1rem; font-weight: 600; color: #1c1c1e; display: block; }
+.esi-label { font-size: 0.65rem; color: #8e8e93; }
+
+.eval-card {
   background: #fff; border-radius: 14px; padding: 18px; margin-bottom: 12px;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.04), 0 0 0 0.5px rgba(0,0,0,0.04);
 }
-.eval-section h4 { font-size: 0.88rem; color: #b8942e; margin-bottom: 12px; font-weight: 600; }
+.eval-card h4 { font-size: 0.88rem; color: #b8942e; margin-bottom: 12px; font-weight: 600; }
 
-.correction-item { margin-bottom: 10px; font-size: 0.8rem; line-height: 1.5; }
-.correction-item .orig { color: #ff3b30; display: block; }
-.correction-item .corr { color: #34c759; display: block; }
-.correction-item .nat { color: #248a3d; font-size: 0.75rem; display: block; margin-top: 2px; }
+.eval-summary-en { font-size: 0.85rem; color: #1c1c1e; line-height: 1.6; margin-bottom: 8px; }
+.eval-summary-cn { font-size: 0.82rem; color: #8e8e93; line-height: 1.6; padding-top: 8px; border-top: 0.5px solid #e5e5ea; }
 
-.exp-item { font-size: 0.8rem; margin-bottom: 6px; display: flex; align-items: center; gap: 8px; color: #1c1c1e; }
-.exp-item .speak-btn-small {
-  font-size: 0.8rem; color: #b8942e; background: none; border: none; cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-}
+.eval-rec-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.eval-rec-tag { background: #fdf6e3; color: #b8942e; font-size: 0.72rem; padding: 6px 12px; border-radius: 8px; }
+
+.eval-topic-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.eval-topic-tag { background: #e8f0fe; color: #007aff; font-size: 0.72rem; padding: 6px 12px; border-radius: 8px; }
 
 .eval-actions { display: flex; gap: 8px; margin-top: 8px; }
 .btn-back { flex: 1; padding: 14px; background: #fff; color: #b8942e; border: 0.5px solid #d1d1d6; border-radius: 14px; font-size: 0.85rem; font-weight: 600; cursor: pointer; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
